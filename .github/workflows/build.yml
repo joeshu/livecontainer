@@ -17,6 +17,8 @@ jobs:
     env:
       scheme: LiveContainer
       archive_path: archive
+      SIDESTORE_REPOSITORY: joeshu/SideStore
+      SIDESTORE_COMMIT: 8587a5e7a54ff457e91a7ca8142d05a2fd7c7541
     outputs:
       scheme: ${{ steps.scheme.outputs.scheme }}
       archive_path: ${{ env.archive_path }}
@@ -66,8 +68,45 @@ jobs:
         with:
           name: ${{ env.archive_path }}.xcarchive.tar
           path: ${{ env.archive_path }}.xcarchive.tar
-      - name: Create IPA
+
+      - name: Build pinned SideStore
+        shell: bash
         run: |
+          set -euo pipefail
+          SIDESTORE_DIR="$RUNNER_TEMP/SideStore"
+          SIDESTORE_IPA="$RUNNER_TEMP/SideStore.ipa"
+          rm -rf "$SIDESTORE_DIR" "$SIDESTORE_IPA"
+
+          git clone "https://github.com/${SIDESTORE_REPOSITORY}.git" "$SIDESTORE_DIR"
+          cd "$SIDESTORE_DIR"
+          git checkout --detach "$SIDESTORE_COMMIT"
+          git submodule update --init --recursive --depth 1
+
+          brew install ldid xcbeautify
+
+          ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+          mkdir -p "$ARTIFACTS_DIR"
+          OPENSSL_FILE="$ARTIFACTS_DIR/https___github_com_krzyzanowskim_OpenSSL_releases_download_3_6_2000_OpenSSL_xcframework_zip"
+          if [ ! -f "$OPENSSL_FILE" ]; then
+            curl -fsSL "https://github.com/krzyzanowskim/OpenSSL/releases/download/3.6.2000/OpenSSL.xcframework.zip" -o "$OPENSSL_FILE"
+          fi
+          UNICORN_FILE="$ARTIFACTS_DIR/https___github_com_mahee96_unicorn_releases_download_2_1_4_multiarch_Unicorn_xcframework_zip"
+          if [ ! -f "$UNICORN_FILE" ]; then
+            curl -fsSL "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip" -o "$UNICORN_FILE"
+          fi
+
+          python3 scripts/ci/workflow.py build
+          cp SideStore.ipa "$SIDESTORE_IPA"
+          echo "SIDESTORE_IPA_PATH=$SIDESTORE_IPA" >> "$GITHUB_ENV"
+          echo "SIDESTORE_SOURCE_SHA=$SIDESTORE_COMMIT" >> "$GITHUB_ENV"
+          echo "SIDESTORE_IPA_SHA256=$(shasum -a 256 "$SIDESTORE_IPA" | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Create IPA
+        env:
+          SIDESTORE_IPA_PATH: ${{ env.SIDESTORE_IPA_PATH }}
+          SIDESTORE_IPA_SHA256: ${{ env.SIDESTORE_IPA_SHA256 }}
+        run: |
+          echo "Embedding SideStore source commit: $SIDESTORE_SOURCE_SHA"
           sh .github/build_github.sh
 
       - name: Upload a Build Artifact

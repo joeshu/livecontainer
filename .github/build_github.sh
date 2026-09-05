@@ -39,9 +39,34 @@ mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:Key string LCOpenSideStore" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:DefaultValue bool false" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 
-# download SideStore
+# Use a locally built, commit-pinned SideStore IPA when CI provides one.
+# A remote URL remains available as a fallback for manual/local builds.
+SIDESTORE_IPA_PATH="${SIDESTORE_IPA_PATH:-}"
+SIDESTORE_IPA_URL="${SIDESTORE_IPA_URL:-https://github.com/LiveContainer/SideStore/releases/download/nightly/SideStore.ipa}"
+SIDESTORE_IPA_SHA256="${SIDESTORE_IPA_SHA256:-}"
+
 cd tmp
-wget https://github.com/LiveContainer/SideStore/releases/download/nightly/SideStore.ipa
+if [ -n "${SIDESTORE_IPA_PATH}" ]; then
+    echo "Embedding locally built SideStore: ${SIDESTORE_IPA_PATH}"
+    cp "${SIDESTORE_IPA_PATH}" SideStore.ipa
+else
+    echo "Embedding SideStore from: ${SIDESTORE_IPA_URL}"
+    wget -O SideStore.ipa "${SIDESTORE_IPA_URL}"
+fi
+
+ACTUAL_SIDESTORE_SHA256="$(shasum -a 256 SideStore.ipa | awk '{print $1}')"
+if [ -n "${SIDESTORE_IPA_SHA256}" ]; then
+    if [ "${ACTUAL_SIDESTORE_SHA256}" != "${SIDESTORE_IPA_SHA256}" ]; then
+        echo "SideStore IPA checksum mismatch"
+        echo "Expected: ${SIDESTORE_IPA_SHA256}"
+        echo "Actual:   ${ACTUAL_SIDESTORE_SHA256}"
+        exit 1
+    fi
+    echo "SideStore IPA checksum verified: ${ACTUAL_SIDESTORE_SHA256}"
+else
+    echo "Embedded SideStore SHA256: ${ACTUAL_SIDESTORE_SHA256}"
+fi
+
 unzip SideStore.ipa
 cd ..
 
