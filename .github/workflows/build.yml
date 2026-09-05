@@ -92,7 +92,7 @@ jobs:
           fi
           UNICORN_FILE="$ARTIFACTS_DIR/https___github_com_mahee96_unicorn_releases_download_2_1_4_multiarch_Unicorn_xcframework_zip"
           if [ ! -f "$UNICORN_FILE" ]; then
-            curl -fsSL "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn_xcframework.zip" -o "$UNICORN_FILE"
+            curl -fsSL "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip" -o "$UNICORN_FILE"
           fi
 
           python3 scripts/ci/workflow.py build
