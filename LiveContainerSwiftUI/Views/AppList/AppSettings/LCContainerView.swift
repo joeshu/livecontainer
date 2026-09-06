@@ -11,6 +11,7 @@ protocol LCContainerViewDelegate {
     func unbindContainer(container: LCContainer)
     func setDefaultContainer(container: LCContainer)
     func saveContainer(container: LCContainer)
+    func getAppModel() -> LCAppModel
     
     func getSettingsBundle() -> Bundle?
     func getContainerURL(container: LCContainer) -> URL
@@ -264,17 +265,20 @@ struct LCContainerView : View {
     }
     
     func removeContainer() async {
-        if let usingLC = LCSharedUtils.getContainerUsingLCScheme(withFolderName: container.folderName) {
-            errorInfo = "lc.container.inUseBy %@".localizeWithFormat(usingLC)
-            errorShow = true
-            return
-        }
         guard let ans = await removeContainerAlert.open(), ans else {
             return
         }
         do {
-            let fm = FileManager.default
-            try fm.removeItem(at: container.containerURL)
+            let report = try LCDataCleanupService.shared.delete(
+                container: container,
+                from: delegate.getAppModel(),
+                removeDefinition: true
+            )
+            guard !report.didFail else {
+                errorInfo = report.summary + "\n" + report.failures.joined(separator: "\n")
+                errorShow = true
+                return
+            }
         } catch {
             errorInfo = error.localizedDescription
             errorShow = true
@@ -297,34 +301,45 @@ struct LCContainerView : View {
     }
     
     func cleanUpKeychain() async {
-        if let usingLC = LCSharedUtils.getContainerUsingLCScheme(withFolderName: container.folderName) {
-            errorInfo = "lc.container.inUseBy %@".localizeWithFormat(usingLC)
-            errorShow = true
-            return
-        }
         guard let ans = await removeKeychainAlert.open(), ans else {
             return
         }
-        
-        LCUtils.removeAppKeychain(dataUUID: container.folderName)
-    }
-    
-    func deleteData() async {
-        if let usingLC = LCSharedUtils.getContainerUsingLCScheme(withFolderName: container.folderName) {
-            errorInfo = "lc.container.inUseBy %@".localizeWithFormat(usingLC)
+        do {
+            let report = try LCDataCleanupService.shared.cleanKeychain(
+                for: container,
+                app: delegate.getAppModel()
+            )
+            if report.didFail {
+                throw NSError(
+                    domain: "LiveContainer.Cleanup",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: report.failures.joined(separator: "\n")]
+                )
+            }
+            successInfo = report.summary
+            successShow = true
+        } catch {
+            errorInfo = error.localizedDescription
             errorShow = true
-            return
         }
+    }
+
+    func deleteData() async {
         guard let ans = await deleteDataAlert.open(), ans else {
             return
         }
         do {
-            let fm = FileManager.default
-            for file in try fm.contentsOfDirectory(at: container.containerURL, includingPropertiesForKeys: nil) {
-                if file.lastPathComponent == "LCContainerInfo.plist" {
-                    continue
-                }
-                try fm.removeItem(at: file)
+            let report = try LCDataCleanupService.shared.delete(
+                container: container,
+                from: delegate.getAppModel(),
+                removeDefinition: false
+            )
+            if report.didFail {
+                errorInfo = report.summary + "\n" + report.failures.joined(separator: "\n")
+                errorShow = true
+            } else {
+                successInfo = report.summary
+                successShow = true
             }
         } catch {
             errorInfo = error.localizedDescription
