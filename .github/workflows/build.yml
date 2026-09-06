@@ -37,7 +37,7 @@ jobs:
         run: |
           if [ $scheme = default ]
           then
-            scheme_list=$(xcodebuild -list -json | tr -d "\\n")
+            scheme_list=$(xcodebuild -list -json | tr -d "\n")
             scheme=$(echo $scheme_list | ruby -e "require 'json'; puts JSON.parse(STDIN.gets)['project']['targets'][0]")
             echo Using default scheme: $scheme
           else
@@ -47,12 +47,12 @@ jobs:
       - name: Set filetype_parameter
         id: filetype_parameter
         run: |
-          filetype_parameter=`ls -A | grep -i \\\.xcworkspace\\$ && echo workspace || echo project`
+          filetype_parameter=`ls -A | grep -i \\.xcworkspace\$ && echo workspace || echo project`
           echo "filetype_parameter=$filetype_parameter" >> $GITHUB_OUTPUT
       - name: Set file_to_build
         id: file_to_build
         run: |
-          file_to_build=`ls -A | grep -i \\\.xcworkspace\\$ || ls -A | grep -i \\\.xcodeproj\\$`
+          file_to_build=`ls -A | grep -i \\.xcworkspace\$ || ls -A | grep -i \\.xcodeproj\$`
           file_to_build=`echo $file_to_build | awk '{$1=$1;print}'`
           echo "file_to_build=$file_to_build" >> $GITHUB_OUTPUT
       - name: Archive
