@@ -273,19 +273,171 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
             }
 
             let fileManager = FileManager.default
+            // Read these before deleting the bundle. Guest App Group data is
+            // stored outside Data/Application/<container UUID>, so it cannot
+            // be discovered after the app bundle is gone.
+            let appGroupIdentifiers = applicationGroupIdentifiers(for: appInfo)
+            let dataUUIDs = Set(containers.map(\.folderName).filter { !$0.isEmpty })
+
             try fileManager.removeItem(atPath: bundlePath)
             delegate.removeApp(app: configuration.model)
 
             if shouldRemoveAppFolders {
+                var cleanupErrors: [Error] = []
                 for container in containers {
                     let dataUUID = container.folderName
-                    try fileManager.removeItem(at: LCPath.dataPath.appendingPathComponent(dataUUID))
+                    do {
+                        try removeContainerData(container, fileManager: fileManager)
+                    } catch {
+                        cleanupErrors.append(error)
+                    }
+
+                    // Clean both the current keychain namespace and the
+                    // legacy host-defaults preference bucket.
                     LCUtils.removeAppKeychain(dataUUID: dataUUID)
+                    LCSharedUtils.removeLegacyPreferences(forDataUUID: dataUUID)
                     DataManager.shared.model.appDataFolderNames.removeAll { $0 == dataUUID }
+                }
+
+                // App Group data lives outside the container directory. Only
+                // remove a group when no remaining installed app declares the
+                // same group, otherwise shared app data could be destroyed.
+                do {
+                    try removeUnusedAppGroupData(
+                        appGroupIdentifiers,
+                        excluding: configuration.model,
+                        fileManager: fileManager
+                    )
+                } catch {
+                    cleanupErrors.append(error)
+                }
+
+                clearUninstallRuntimeState(
+                    appInfo: appInfo,
+                    dataUUIDs: dataUUIDs
+                )
+
+                if let cleanupError = cleanupErrors.first {
+                    throw cleanupError
                 }
             }
         } catch {
             showError(error.localizedDescription)
+        }
+    }
+
+    private func removeContainerData(_ container: LCContainer, fileManager: FileManager) throws {
+        let containerURL = container.containerURL.standardizedFileURL
+        guard fileManager.fileExists(atPath: containerURL.path) else {
+            return
+        }
+
+        if container.storageBookMark != nil {
+            // External/bookmarked storage belongs to the user. Delete its
+            // contents, including LCContainerInfo.plist, but keep the folder
+            // itself so the bookmark remains non-destructive to its parent.
+            let contents = try fileManager.contentsOfDirectory(
+                at: containerURL,
+                includingPropertiesForKeys: nil,
+                options: []
+            )
+            for item in contents {
+                try fileManager.removeItem(at: item)
+            }
+        } else {
+            // Use the resolved container URL instead of reconstructing a path
+            // from LCPath.dataPath. This also covers containers moved to the
+            // shared LiveContainer directory.
+            try fileManager.removeItem(at: containerURL)
+        }
+    }
+
+    private func applicationGroupIdentifiers(for appInfo: LCAppInfo) -> Set<String> {
+        guard let info = NSDictionary(contentsOfFile: "\(appInfo.bundlePath())/Info.plist"),
+              let executable = info["CFBundleExecutable"] as? String else {
+            return []
+        }
+
+        let executablePath = "\(appInfo.bundlePath())/\(executable)"
+        guard let entitlementXML = getExecutableEntitlementXML(executablePath),
+              let data = entitlementXML.data(using: .utf8),
+              let entitlementDict = try? PropertyListSerialization.propertyList(
+                  from: data,
+                  options: [],
+                  format: nil
+              ) as? [String: Any],
+              let groups = entitlementDict["com.apple.security.application-groups"] as? [String] else {
+            return []
+        }
+
+        return Set(groups.filter { !$0.isEmpty && !$0.contains("/") })
+    }
+
+    private func removeUnusedAppGroupData(
+        _ groupIdentifiers: Set<String>,
+        excluding removedApp: LCAppModel,
+        fileManager: FileManager
+    ) throws {
+        guard !groupIdentifiers.isEmpty else {
+            return
+        }
+
+        let remainingApps = DataManager.shared.model.apps
+            .filter { $0 !== removedApp }
+            + DataManager.shared.model.hiddenApps.filter { $0 !== removedApp }
+        var groupsUsedByRemainingApps = Set<String>()
+        for app in remainingApps {
+            groupsUsedByRemainingApps.formUnion(applicationGroupIdentifiers(for: app.appInfo))
+        }
+
+        let groupsToRemove = groupIdentifiers.subtracting(groupsUsedByRemainingApps)
+        let roots = [LCPath.appGroupPath, LCPath.lcGroupAppGroupPath]
+        for group in groupsToRemove {
+            for root in roots {
+                let groupURL = root.appendingPathComponent(group, isDirectory: true)
+                if fileManager.fileExists(atPath: groupURL.path) {
+                    try fileManager.removeItem(at: groupURL)
+                }
+            }
+        }
+    }
+
+    private func clearUninstallRuntimeState(appInfo: LCAppInfo, dataUUIDs: Set<String>) {
+        let relativeBundlePath = appInfo.relativeBundlePath
+        let appURLSchemes = Set((appInfo.urlSchemes() as? [String]) ?? [])
+
+        let defaults = UserDefaults.standard
+        if let selected = defaults.string(forKey: "selected"), selected == relativeBundlePath {
+            defaults.removeObject(forKey: "selected")
+        }
+        if let selectedContainer = defaults.string(forKey: "selectedContainer"), dataUUIDs.contains(selectedContainer) {
+            defaults.removeObject(forKey: "selectedContainer")
+        }
+        if let launchURL = defaults.string(forKey: "launchAppUrlScheme"),
+           let scheme = URL(string: launchURL)?.scheme,
+           appURLSchemes.contains(scheme) {
+            defaults.removeObject(forKey: "launchAppUrlScheme")
+        }
+
+        let sharedDefaults = UserDefaults.lcShared()
+        if var guestSchemes = sharedDefaults.array(forKey: "LCGuestURLSchemes") as? [String] {
+            guestSchemes.removeAll { appURLSchemes.contains($0) }
+            sharedDefaults.set(guestSchemes, forKey: "LCGuestURLSchemes")
+        }
+
+        if LCUtils.appGroupUserDefault.string(forKey: "LCLaunchExtensionBundleID") == relativeBundlePath {
+            LCUtils.appGroupUserDefault.removeObject(forKey: "LCLaunchExtensionBundleID")
+            LCUtils.appGroupUserDefault.removeObject(forKey: "LCLaunchExtensionContainerName")
+            LCUtils.appGroupUserDefault.removeObject(forKey: "LCLaunchExtensionLaunchURL")
+            LCUtils.appGroupUserDefault.removeObject(forKey: "LCLaunchExtensionLaunchDate")
+        }
+
+        if let bundleIdentifier = appInfo.bundleIdentifier(),
+           let relativeBundlePath,
+           var customOrder = LCUtils.appGroupUserDefault.array(forKey: "LCCustomSortOrder") as? [String] {
+            let uniqueIdentifier = "\(bundleIdentifier):\(relativeBundlePath)"
+            customOrder.removeAll { $0 == uniqueIdentifier }
+            LCUtils.appGroupUserDefault.set(customOrder, forKey: "LCCustomSortOrder")
         }
     }
 
