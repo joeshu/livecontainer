@@ -14,6 +14,7 @@
 + (void)moveSharedAppFolderBack;
 + (NSBundle*)findBundleWithBundleId:(NSString*)bundleId isSharedAppOut:(bool*)isSharedAppOut;
 + (void)dumpPreferenceToPath:(NSString*)plistLocationTo dataUUID:(NSString*)dataUUID;
++ (void)removeLegacyPreferencesForDataUUID:(NSString*)dataUUID;
 + (NSString*)findDefaultContainerWithBundleId:(NSString*)bundleId;
 + (NSArray<NSString*>*)lcUnorderedUrlSchemes;
 + (NSArray<NSString*>*)lcUrlSchemes;
