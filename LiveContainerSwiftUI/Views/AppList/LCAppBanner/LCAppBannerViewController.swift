@@ -353,12 +353,13 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
     }
 
     private func applicationGroupIdentifiers(for appInfo: LCAppInfo) -> Set<String> {
-        guard let info = NSDictionary(contentsOfFile: "\(appInfo.bundlePath())/Info.plist"),
+        guard let bundlePath = appInfo.bundlePath(),
+              let info = NSDictionary(contentsOfFile: "\(bundlePath)/Info.plist"),
               let executable = info["CFBundleExecutable"] as? String else {
             return []
         }
 
-        let executablePath = "\(appInfo.bundlePath())/\(executable)"
+        let executablePath = "\(bundlePath)/\(executable)"
         guard let entitlementXML = getExecutableEntitlementXML(executablePath),
               let data = entitlementXML.data(using: .utf8),
               let entitlementDict = try? PropertyListSerialization.propertyList(
@@ -419,7 +420,9 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
             defaults.removeObject(forKey: "launchAppUrlScheme")
         }
 
-        let sharedDefaults = UserDefaults.lcShared()
+        guard let sharedDefaults = UserDefaults.lcShared() else {
+            return
+        }
         if var guestSchemes = sharedDefaults.array(forKey: "LCGuestURLSchemes") as? [String] {
             guestSchemes.removeAll { appURLSchemes.contains($0) }
             sharedDefaults.set(guestSchemes, forKey: "LCGuestURLSchemes")
