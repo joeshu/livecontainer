@@ -42,6 +42,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     @State var choosingIPA = false
     @State var errorShow = false
     @State var errorInfo = ""
+    @State private var pendingIPAURL: URL?
+    @State private var choosingInstallMode = false
     
     // ipa installing stuff
     @State var installprogressVisible = false
@@ -296,10 +298,23 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             Text(errorInfo)
         }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { fileUrls in
-            Task { await startInstallApp(fileUrls[0]) }
+            presentInstallMode(for: fileUrls[0])
         }, onDismiss: {
             choosingIPA = false
         })
+        .confirmationDialog("lc.appList.chooseInstallMode".loc, isPresented: $choosingInstallMode, titleVisibility: .visible) {
+            Button("lc.appList.installMode.standalone".loc) {
+                guard let url = consumePendingIPAURL() else { return }
+                LCUtils.openSideStore(delegate: self, urlStr: url.absoluteString)
+            }
+            Button("lc.appList.installMode.container".loc) {
+                guard let url = consumePendingIPAURL() else { return }
+                Task { await startInstallApp(url) }
+            }
+            Button("lc.common.cancel".loc, role: .cancel) { discardPendingIPAURL() }
+        } message: {
+            Text("lc.appList.chooseInstallMode.tip".loc)
+        }
         .alert("lc.appList.installation".loc, isPresented: $installReplaceAlert.show) {
             ForEach(installOptions, id: \.self) { installOption in
                 Button(role: installOption.isReplace ? .destructive : nil, action: {
@@ -581,6 +596,54 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             errorShow = true
             self.installprogressVisible = false
         }
+    }
+
+    func presentInstallMode(for sourceURL: URL) {
+        do {
+            let stagedURL = try stageImportedIPA(sourceURL)
+            discardPendingIPAURL()
+            pendingIPAURL = stagedURL
+            if UserDefaults.sideStoreExist() {
+                choosingInstallMode = true
+            } else {
+                pendingIPAURL = nil
+                Task { await startInstallApp(stagedURL) }
+            }
+        } catch {
+            errorInfo = error.localizedDescription
+            errorShow = true
+        }
+    }
+
+    private func stageImportedIPA(_ sourceURL: URL) throws -> URL {
+        let didAccess = sourceURL.startAccessingSecurityScopedResource()
+        defer { if didAccess { sourceURL.stopAccessingSecurityScopedResource() } }
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("UnifiedIPAImport", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        if let entries = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey]) {
+            let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+            for entry in entries where entry != pendingIPAURL {
+                let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey])
+                if values?.contentModificationDate.map({ $0 < cutoff }) ?? true { try? FileManager.default.removeItem(at: entry) }
+            }
+        }
+        let ext = sourceURL.pathExtension.lowercased()
+        guard ext == "ipa" || ext == "tipa" else {
+            throw NSError(domain: Bundle.main.bundleIdentifier ?? "LiveContainer", code: 400, userInfo: [NSLocalizedDescriptionKey: "lc.appList.urlFileIsNotIpaError".loc])
+        }
+        let destination = directory.appendingPathComponent(UUID().uuidString).appendingPathExtension(ext)
+        try FileManager.default.copyItem(at: sourceURL, to: destination)
+        return destination
+    }
+
+    private func consumePendingIPAURL() -> URL? {
+        defer { pendingIPAURL = nil }
+        return pendingIPAURL
+    }
+
+    private func discardPendingIPAURL() {
+        if let pendingIPAURL { try? FileManager.default.removeItem(at: pendingIPAURL) }
+        pendingIPAURL = nil
     }
     
     nonisolated func decompress(_ path: String, _ destination: String ,_ progress: Progress) async -> Int32 {
@@ -1186,7 +1249,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     
     func handleURL(url : URL) {
         if url.isFileURL {
-            Task { await installFromUrl(urlStr: url.absoluteString) }
+            presentInstallMode(for: url)
             return
         }
         
@@ -1243,8 +1306,17 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                         installUrl = installUrl1
                     }
                 }
-                if let installUrl {
-                    Task { await installFromUrl(urlStr: installUrl) }
+                if let installUrl, let installURL = URL(string: installUrl) {
+                    let mode = components.queryItems?.first(where: { $0.name == "mode" })?.value
+                    if mode == "container" {
+                        Task { await startInstallApp(installURL) }
+                    } else if mode == "standalone" {
+                        LCUtils.openSideStore(delegate: self, urlStr: installURL.absoluteString)
+                    } else if installURL.isFileURL {
+                        presentInstallMode(for: installURL)
+                    } else {
+                        Task { await installFromUrl(urlStr: installUrl) }
+                    }
                 }
             }
         }
