@@ -389,6 +389,17 @@ NSString* FBSOpenApplicationOptionKeyPayloadURL = @"__PayloadURL";
     [lcUserDefaults removeObjectForKey:dataUUID];
 }
 
++ (void)removeLegacyPreferencesForDataUUID:(NSString*)dataUUID {
+    if (![dataUUID isKindOfClass:NSString.class] || dataUUID.length == 0) {
+        return;
+    }
+
+    // Older LiveContainer builds kept guest preference dictionaries in the
+    // host defaults under the container UUID. Removing the container folder
+    // alone cannot remove this legacy entry.
+    [lcUserDefaults removeObjectForKey:dataUUID];
+}
+
 + (NSString*)findDefaultContainerWithBundleId:(NSString*)bundleId {
     // find app's default container
     NSURL* appGroupFolder = [[LCSharedUtils appGroupPath] URLByAppendingPathComponent:@"LiveContainer"];
