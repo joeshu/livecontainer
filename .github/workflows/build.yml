@@ -18,7 +18,7 @@ jobs:
       scheme: LiveContainer
       archive_path: archive
       SIDESTORE_REPOSITORY: joeshu/SideStore
-      SIDESTORE_COMMIT: 0bee1aee7c463ffa292fdc7de2ee79c7722a9315
+      SIDESTORE_COMMIT: 2a0347e41191b59e4418c2e2d8c6dd118a3f5ae6
     outputs:
       scheme: ${{ steps.scheme.outputs.scheme }}
       archive_path: ${{ env.archive_path }}
