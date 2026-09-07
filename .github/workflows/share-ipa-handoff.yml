@@ -1,0 +1,21 @@
+name: Share IPA Handoff Guard
+
+on:
+  push:
+    paths:
+      - 'ShareExtension/**'
+      - 'scripts/ci/verify_share_ipa_handoff.py'
+      - '.github/workflows/share-ipa-handoff.yml'
+  pull_request:
+    paths:
+      - 'ShareExtension/**'
+      - 'scripts/ci/verify_share_ipa_handoff.py'
+      - '.github/workflows/share-ipa-handoff.yml'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify Share Extension IPA handoff
+        run: python3 scripts/ci/verify_share_ipa_handoff.py

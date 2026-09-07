@@ -455,12 +455,21 @@ final class ShareExtensionViewModel: ObservableObject {
         defer { isLaunching = false }
 
         do {
-            try storeBookmark(for: fileURL)
+            // A file URL provided to a share extension belongs to the extension/provider
+            // security scope. It is not safe to hand that URL to the host app and then
+            // complete the extension request. Copy the IPA into the shared App Group
+            // first, while the extension still owns valid access.
+            let stagedURL = try stageSharedInstallFile(fileURL)
+
+            // Keep a bookmark as a compatibility fallback for older/deep-link paths,
+            // but the App Group copy is the primary handoff and must not depend on it.
+            try? storeBookmark(for: fileURL)
+
             guard var components = URLComponents(string: "livecontainer://install") else {
                 throw ShareExtensionError("Unable to build install URL.")
             }
             components.queryItems = [
-                URLQueryItem(name: "url", value: fileURL.absoluteString),
+                URLQueryItem(name: "url", value: stagedURL.absoluteString),
                 URLQueryItem(name: "mode", value: "container")
             ]
             guard let installURL = components.url else {
@@ -471,6 +480,67 @@ final class ShareExtensionViewModel: ObservableObject {
             (context ?? currentContext)?.completeRequest(returningItems: nil, completionHandler: nil)
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func stageSharedInstallFile(_ fileURL: URL) throws -> URL {
+        let ext = fileURL.pathExtension.lowercased()
+        guard ext == "ipa" || ext == "tipa" else {
+            throw ShareExtensionError("lc.appList.urlFileIsNotIpaError".loc)
+        }
+        guard let appGroupRootURL else {
+            throw ShareExtensionError("Unable to access LiveContainer shared container.")
+        }
+
+        let fm = FileManager.default
+        let inboxURL = appGroupRootURL.appendingPathComponent("ImportInbox", isDirectory: true)
+        try fm.createDirectory(at: inboxURL, withIntermediateDirectories: true)
+        cleanupSharedInstallInbox(inboxURL)
+
+        let accessed = fileURL.startAccessingSecurityScopedResource()
+        defer {
+            if accessed {
+                fileURL.stopAccessingSecurityScopedResource()
+            }
+        }
+
+        let destinationURL = inboxURL
+            .appendingPathComponent(UUID().uuidString)
+            .appendingPathExtension(ext)
+        do {
+            try fm.copyItem(at: fileURL, to: destinationURL)
+            let attributes = try fm.attributesOfItem(atPath: destinationURL.path)
+            let fileSize = (attributes[.size] as? NSNumber)?.int64Value ?? 0
+            guard fileSize > 0 else {
+                try? fm.removeItem(at: destinationURL)
+                throw ShareExtensionError("lc.appList.ipaAccessError".loc)
+            }
+            return destinationURL
+        } catch {
+            try? fm.removeItem(at: destinationURL)
+            throw error
+        }
+    }
+
+    private func cleanupSharedInstallInbox(_ inboxURL: URL) {
+        let fm = FileManager.default
+        let cutoff = Date().addingTimeInterval(-24 * 60 * 60)
+        guard let entries = try? fm.contentsOfDirectory(
+            at: inboxURL,
+            includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+
+        for entry in entries {
+            let ext = entry.pathExtension.lowercased()
+            guard ext == "ipa" || ext == "tipa" else { continue }
+            let values = try? entry.resourceValues(forKeys: [.contentModificationDateKey, .isRegularFileKey])
+            guard values?.isRegularFile == true else { continue }
+            if values?.contentModificationDate.map({ $0 < cutoff }) ?? true {
+                try? fm.removeItem(at: entry)
+            }
         }
     }
 
