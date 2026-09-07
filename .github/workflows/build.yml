@@ -18,7 +18,7 @@ jobs:
       scheme: LiveContainer
       archive_path: archive
       SIDESTORE_REPOSITORY: joeshu/SideStore
-      SIDESTORE_COMMIT: 49d7c64127bef7f8bc3ae2e17c7c08edb29a925d
+      SIDESTORE_COMMIT: 5a829adfe6adc70d68d4bf4643330d4b8b6d53c2
     outputs:
       scheme: ${{ steps.scheme.outputs.scheme }}
       archive_path: ${{ env.archive_path }}
@@ -96,6 +96,7 @@ jobs:
           fi
 
           python3 scripts/ci/verify_zh_hans_localization.py
+          python3 scripts/ci/check_zh_hans_ui_coverage.py
           python3 scripts/ci/workflow.py build
           cp SideStore.ipa "$SIDESTORE_IPA"
 
@@ -104,9 +105,10 @@ jobs:
           grep 'Payload/SideStore.app/zh-Hans.lproj/' "$RUNNER_TEMP/sidestore-ipa-files.txt"
           grep -q 'Payload/SideStore.app/zh-Hans.lproj/Localizable.strings' "$RUNNER_TEMP/sidestore-ipa-files.txt"
           grep -q 'Payload/SideStore.app/zh-Hans.lproj/InfoPlist.strings' "$RUNNER_TEMP/sidestore-ipa-files.txt"
+          grep -q 'Payload/SideStore.app/zh-Hans.lproj/InterfaceFallback.strings' "$RUNNER_TEMP/sidestore-ipa-files.txt"
           COUNT=$(grep -c 'Payload/SideStore.app/zh-Hans.lproj/' "$RUNNER_TEMP/sidestore-ipa-files.txt")
-          if [ "$COUNT" -lt 6 ]; then
-            echo "Expected at least 6 SideStore zh-Hans resources, found $COUNT"
+          if [ "$COUNT" -lt 7 ]; then
+            echo "Expected at least 7 SideStore zh-Hans resources, found $COUNT"
             exit 1
           fi
 
@@ -132,9 +134,10 @@ jobs:
           grep "$PREFIX" "$RUNNER_TEMP/livecontainer-sidestore-files.txt"
           grep -q "${PREFIX}Localizable.strings" "$RUNNER_TEMP/livecontainer-sidestore-files.txt"
           grep -q "${PREFIX}InfoPlist.strings" "$RUNNER_TEMP/livecontainer-sidestore-files.txt"
+          grep -q "${PREFIX}InterfaceFallback.strings" "$RUNNER_TEMP/livecontainer-sidestore-files.txt"
           COUNT=$(grep -c "$PREFIX" "$RUNNER_TEMP/livecontainer-sidestore-files.txt")
-          if [ "$COUNT" -lt 6 ]; then
-            echo "Expected at least 6 embedded zh-Hans resources, found $COUNT"
+          if [ "$COUNT" -lt 7 ]; then
+            echo "Expected at least 7 embedded zh-Hans resources, found $COUNT"
             exit 1
           fi
 
