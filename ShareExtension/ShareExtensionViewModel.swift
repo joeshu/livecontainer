@@ -460,7 +460,8 @@ final class ShareExtensionViewModel: ObservableObject {
                 throw ShareExtensionError("Unable to build install URL.")
             }
             components.queryItems = [
-                URLQueryItem(name: "url", value: fileURL.absoluteString)
+                URLQueryItem(name: "url", value: fileURL.absoluteString),
+                URLQueryItem(name: "mode", value: "container")
             ]
             guard let installURL = components.url else {
                 throw ShareExtensionError("Unable to build install URL.")

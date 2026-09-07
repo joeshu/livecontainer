@@ -256,9 +256,11 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
             return
         }
 
-        var shouldRemoveAppFolders = false
         let containers = appInfo.containers
-        if !containers.isEmpty {
+        let shouldRemoveAppFolders: Bool
+        if containers.isEmpty {
+            shouldRemoveAppFolders = false
+        } else {
             shouldRemoveAppFolders = await presentConfirmation(
                 title: "lc.appBanner.deleteDataTitle".loc,
                 message: "lc.appBanner.deleteDataMsg %@".localizeWithFormat(displayName),
@@ -268,28 +270,18 @@ final class LCAppBannerViewController: UIViewController, UIContextMenuInteractio
         }
 
         do {
-            guard let bundlePath = appInfo.bundlePath() else {
-                throw CocoaError(.fileNoSuchFile)
-            }
-
-            let fileManager = FileManager.default
-            try fileManager.removeItem(atPath: bundlePath)
+            let report = try LCDataCleanupService.shared.uninstall(
+                app: configuration.model,
+                deleteData: shouldRemoveAppFolders
+            )
             delegate.removeApp(app: configuration.model)
-
-            if shouldRemoveAppFolders {
-                for container in containers {
-                    let dataUUID = container.folderName
-                    try fileManager.removeItem(at: LCPath.dataPath.appendingPathComponent(dataUUID))
-                    LCUtils.removeAppKeychain(dataUUID: dataUUID)
-                    DataManager.shared.model.appDataFolderNames.removeAll { $0 == dataUUID }
-                }
+            if report.didFail {
+                showError(report.summary + "\n" + report.failures.joined(separator: "\n"))
             }
         } catch {
             showError(error.localizedDescription)
         }
     }
-
-
 
     private func copyLaunchUrl() {
         guard let relativeBundlePath = configuration.model.appInfo.relativeBundlePath else {

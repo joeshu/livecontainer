@@ -774,6 +774,10 @@ struct LCAppSettingsView: View {
 
 
 extension LCAppSettingsView : LCContainerViewDelegate {
+    func getAppModel() -> LCAppModel {
+        return model
+    }
+
     func getBundleId() -> String {
         return model.appInfo.bundleIdentifier()!
     }

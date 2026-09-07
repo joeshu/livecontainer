@@ -207,42 +207,24 @@ struct LCDataManagementView : View {
     }
     
     func cleanUpUnusedFolders() async {
-        
-        var folderNameToAppDict : [String:LCAppModel] = [:]
-        for app in sharedModel.apps {
-            for container in app.appInfo.containers {
-                folderNameToAppDict[container.folderName] = app;
-            }
-        }
-        for app in sharedModel.hiddenApps {
-            for container in app.appInfo.containers {
-                folderNameToAppDict[container.folderName] = app;
-            }
-        }
-        
-        var foldersToDelete : [String]  = []
-        for appDataFolderName in sharedModel.appDataFolderNames {
-            if folderNameToAppDict[appDataFolderName] == nil {
-                foldersToDelete.append(appDataFolderName)
-            }
-        }
-        folderRemoveCount = foldersToDelete.count
+        folderRemoveCount = LCDataCleanupService.shared.orphanedContainerCount(
+            apps: sharedModel.apps,
+            hiddenApps: sharedModel.hiddenApps
+        )
         
         guard let result = await appFolderRemovalAlert.open(), result else {
             return
         }
-        do {
-            let fm = FileManager()
-            for folder in foldersToDelete {
-                try fm.removeItem(at: LCPath.dataPath.appendingPathComponent(folder))
-                LCUtils.removeAppKeychain(dataUUID: folder)
-                sharedModel.appDataFolderNames.removeAll(where: { s in
-                    return s == folder
-                })
-            }
-        } catch {
-            errorInfo = error.localizedDescription
+        let report = LCDataCleanupService.shared.removeOrphanedContainers(
+            apps: sharedModel.apps,
+            hiddenApps: sharedModel.hiddenApps
+        )
+        if report.didFail {
+            errorInfo = report.summary + "\n" + report.failures.joined(separator: "\n")
             errorShow = true
+        } else {
+            successInfo = report.summary
+            successShow = true
         }
         
     }
@@ -252,16 +234,15 @@ struct LCDataManagementView : View {
             return
         }
         
-        [kSecClassGenericPassword, kSecClassInternetPassword, kSecClassCertificate, kSecClassKey, kSecClassIdentity].forEach {
-          let status = SecItemDelete([
-            kSecClass: $0,
-            kSecAttrSynchronizable: kSecAttrSynchronizableAny
-          ] as CFDictionary)
-          if status != errSecSuccess && status != errSecItemNotFound {
-              //Error while removing class $0
-              errorInfo = status.description
-              errorShow = true
-          }
+        let report = LCDataCleanupService.shared.cleanKeychains(
+            for: sharedModel.apps + sharedModel.hiddenApps
+        )
+        if report.didFail {
+            errorInfo = report.summary + "\n" + report.failures.joined(separator: "\n")
+            errorShow = true
+        } else {
+            successInfo = report.summary
+            successShow = true
         }
     }
 
@@ -270,27 +251,16 @@ struct LCDataManagementView : View {
             return
         }
 
-        let fm = FileManager.default
-        let tmpDirectory = fm.temporaryDirectory
-
-        do {
-            let tmpItems = try fm.contentsOfDirectory(at: tmpDirectory, includingPropertiesForKeys: nil)
-
-            if tmpItems.isEmpty {
-                successInfo = "lc.settings.noTmpToClean".loc
-                successShow = true
-                return
-            }
-
-            for item in tmpItems {
-                try fm.removeItem(at: item)
-            }
-
-            successInfo = "lc.settings.cleanTmpComplete".loc
+        let report = LCDataCleanupService.shared.clearTemporaryFiles()
+        if report.removedItems.isEmpty && !report.didFail {
+            successInfo = "lc.settings.noTmpToClean".loc
             successShow = true
-        } catch {
-            errorInfo = error.localizedDescription
+        } else if report.didFail {
+            errorInfo = report.summary + "\n" + report.failures.joined(separator: "\n")
             errorShow = true
+        } else {
+            successInfo = "lc.settings.cleanTmpComplete".loc + "\n" + report.summary
+            successShow = true
         }
     }
 
@@ -299,48 +269,19 @@ struct LCDataManagementView : View {
             return
         }
 
-        let fm = FileManager.default
-
-        var allApps = sharedModel.apps + sharedModel.hiddenApps
-        if UserDefaults.sideStoreExist() {
-            allApps.append(LCAppModel(appInfo: BuiltInSideStoreAppInfo.shared))
-        }
-        
-        var cleanedCount = 0
-
-        do {
-            for app in allApps {
-                for container in app.uiContainers {
-                    let containerPath = container.containerURL
-                    let guestCachePath = containerPath.appendingPathComponent("Library/Caches")
-                    
-                    if fm.fileExists(atPath: guestCachePath.path) {
-                        let cacheItems = try fm.contentsOfDirectory(at: guestCachePath, includingPropertiesForKeys: nil)
-                        for item in cacheItems {
-                            try fm.removeItem(at: item)
-                        }
-                        cleanedCount += 1
-                    }
-                }
-            }
-            if let lcCaches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first,
-                fm.fileExists(atPath: lcCaches.path) {
-                let cacheItems = try fm.contentsOfDirectory(at: lcCaches, includingPropertiesForKeys: nil)
-                for item in cacheItems {
-                    try fm.removeItem(at: item)
-                }
-                cleanedCount += 1
-            }
-
-            if cleanedCount == 0 {
-                successInfo = "lc.settings.noCacheToClean".loc
-            } else {
-                successInfo = "lc.settings.cleanCacheComplete".loc
-            }
+        let report = LCDataCleanupService.shared.clearCaches(
+            for: sharedModel.apps,
+            hiddenApps: sharedModel.hiddenApps
+        )
+        if report.removedItems.isEmpty && !report.didFail {
+            successInfo = "lc.settings.noCacheToClean".loc
             successShow = true
-        } catch {
-            errorInfo = error.localizedDescription
+        } else if report.didFail {
+            errorInfo = report.summary + "\n" + report.failures.joined(separator: "\n")
             errorShow = true
+        } else {
+            successInfo = "lc.settings.cleanCacheComplete".loc + "\n" + report.summary
+            successShow = true
         }
     }
 
