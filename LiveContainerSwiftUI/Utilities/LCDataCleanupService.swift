@@ -199,7 +199,7 @@ final class LCDataCleanupService {
                     report.preservedItems.append("\(app.displayName) (\(usingLC))")
                     continue
                 }
-                clearContainerCaches(container, report: &report)
+                clearContainerCaches(container, appInfo: app.appInfo, report: &report)
             }
         }
 
@@ -387,12 +387,14 @@ final class LCDataCleanupService {
         }
     }
 
-    private func clearContainerCaches(_ container: LCContainer, report: inout LCCleanupReport) {
+    private func clearContainerCaches(
+        _ container: LCContainer,
+        appInfo: LCAppInfo,
+        report: inout LCCleanupReport
+    ) {
         let containerURL = container.containerURL.standardizedFileURL
         let isExternal = container.storageBookMark != nil
-        if !isExternal &&
-            !isDescendant(containerURL, of: LCPath.dataPath) &&
-            !isDescendant(containerURL, of: LCPath.lcGroupDataPath) {
+        if !isExternal && !isSafeContainerURL(containerURL, appInfo: appInfo) {
             report.failures.append(LCDataCleanupError.unsafePath(containerURL).localizedDescription)
             return
         }
@@ -415,6 +417,18 @@ final class LCDataCleanupService {
             return
         }
         clearDirectoryContents(at: cacheURL, preserving: [], report: &report)
+    }
+
+    private func isSafeContainerURL(_ url: URL, appInfo: LCAppInfo) -> Bool {
+        if appInfo is BuiltInSideStoreAppInfo {
+            // SideStore is embedded in LiveContainer but keeps its own host
+            // container at Documents/SideStore. Only its own subtree is allowed.
+            let sideStoreRoot = LCPath.docPath.appendingPathComponent("SideStore", isDirectory: true)
+            return isDescendant(url, of: sideStoreRoot)
+        }
+
+        return isDescendant(url, of: LCPath.dataPath) ||
+            isDescendant(url, of: LCPath.lcGroupDataPath)
     }
 
     private func removeUnusedAppGroups(
