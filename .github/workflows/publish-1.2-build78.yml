@@ -1,0 +1,60 @@
+name: Publish Build 78 as 1.2
+
+on:
+  push:
+    branches:
+      - release/1.2-build78
+
+permissions:
+  contents: write
+  actions: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      REPO: joeshu/livecontainer
+      BUILD_RUN_ID: "34168877046"
+      RELEASE_TAG: "1.2"
+      RELEASE_TARGET: "c266b8fb07dc3921dcd87e2bf8f1979b71982780"
+    steps:
+      - name: Verify target release does not already exist
+        run: |
+          set -euo pipefail
+          if gh release view "$RELEASE_TAG" --repo "$REPO" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; refusing to overwrite it."
+            exit 1
+          fi
+
+      - name: Download Build 78 artifacts
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          gh run download "$BUILD_RUN_ID" --repo "$REPO" --name 'LiveContainer+SideStore.ipa' --dir release-assets
+          gh run download "$BUILD_RUN_ID" --repo "$REPO" --name 'LiveContainer.ipa' --dir release-assets
+          test -s 'release-assets/LiveContainer+SideStore.ipa'
+          test -s 'release-assets/LiveContainer.ipa'
+
+      - name: Verify artifact digests
+        run: |
+          set -euo pipefail
+          actual_combo=$(sha256sum 'release-assets/LiveContainer+SideStore.ipa' | awk '{print $1}')
+          expected_combo='94a32a04265526234275f5de460f56486ade077f51e7f518fa1b7845653c1c92'
+          if [ "$actual_combo" != "$expected_combo" ]; then
+            echo "Combined IPA digest mismatch: $actual_combo"
+            exit 1
+          fi
+          sha256sum release-assets/*.ipa | tee release-assets/SHA256SUMS.txt
+
+      - name: Publish 1.2
+        run: |
+          set -euo pipefail
+          gh release create "$RELEASE_TAG" \
+            'release-assets/LiveContainer+SideStore.ipa' \
+            'release-assets/LiveContainer.ipa' \
+            'release-assets/SHA256SUMS.txt' \
+            --repo "$REPO" \
+            --target "$RELEASE_TARGET" \
+            --title 'LiveContainer 1.2' \
+            --notes 'Build #78 主分支正式版本。包含 SideStore 简体中文支持、统一 IPA 导入、Share Extension → LiveContainer IPA 可靠交接修复，以及相关 CI 回归门禁。发布目标提交：c266b8fb07dc3921dcd87e2bf8f1979b71982780。'
