@@ -40,9 +40,15 @@ jobs:
         run: |
           set -euo pipefail
           actual_combo=$(sha256sum 'release-assets/LiveContainer+SideStore.ipa' | awk '{print $1}')
-          expected_combo='94a32a04265526234275f5de460f56486ade077f51e7f518fa1b7845653c1c92'
+          actual_plain=$(sha256sum 'release-assets/LiveContainer.ipa' | awk '{print $1}')
+          expected_combo='737f4572f32dbdc6d98de3817dd926711af251c4eedfbfaa14372278943148fe'
+          expected_plain='598ac0ad490f1501af140110a9504aeb1c19d792136deb5f31ff23d10d796746'
           if [ "$actual_combo" != "$expected_combo" ]; then
             echo "Combined IPA digest mismatch: $actual_combo"
+            exit 1
+          fi
+          if [ "$actual_plain" != "$expected_plain" ]; then
+            echo "LiveContainer IPA digest mismatch: $actual_plain"
             exit 1
           fi
           sha256sum release-assets/*.ipa | tee release-assets/SHA256SUMS.txt
