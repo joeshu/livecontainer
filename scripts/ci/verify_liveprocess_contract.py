@@ -9,12 +9,14 @@ relationship of the state transitions that protect against stale launches.
 from __future__ import annotations
 
 import json
+import re
 import sys
 from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Utilities/LCUtils.m"
+LIVE_PROCESS_SOURCE_PATH = ROOT / "LiveProcess/main.m"
 
 
 def fail(message: str) -> "NoReturn":
@@ -86,8 +88,11 @@ def require_all(body: str, markers: list[str], label: str) -> None:
 def main() -> None:
     if not SOURCE_PATH.is_file():
         fail(f"missing source: {SOURCE_PATH.relative_to(ROOT)}")
+    if not LIVE_PROCESS_SOURCE_PATH.is_file():
+        fail(f"missing source: {LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)}")
 
     source = SOURCE_PATH.read_text(encoding="utf-8")
+    live_process_source = LIVE_PROCESS_SOURCE_PATH.read_text(encoding="utf-8")
     clear_body = extract_function(
         source, "static void LCClearPendingGuestLaunchState(void)"
     )
@@ -164,8 +169,25 @@ def main() -> None:
     if retry_branch < 0 or clear_after_retry < 0:
         fail("stale launch state must be cleared only after retries are exhausted")
 
+    # The embedded SideStore refresh path passes security-scoped bookmarks
+    # through LiveProcess. Indexed assignment into a newly-created mutable
+    # array is an out-of-bounds crash; require append-based handling instead.
+    if re.search(r"\\b(?:bookmarkedUrls|accessibleBookmarkedUrls)\\s*\\[", live_process_source):
+        fail("security-scoped bookmarks must not use indexed mutable-array assignment")
+    require_all(
+        live_process_source,
+        [
+            "isKindOfClass:NSArray.class",
+            "isKindOfClass:NSData.class",
+            "[accessibleBookmarkedUrls addObject:resolvedURL]",
+            "startAccessingSecurityScopedResource",
+        ],
+        "security-scoped bookmark handling",
+    )
+
     result = {
         "source": str(SOURCE_PATH.relative_to(ROOT)),
+        "live_process_source": str(LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)),
         "checked_functions": [
             "LCClearPendingGuestLaunchState",
             "LCCollectLiveProcessDiagnostics",
@@ -178,6 +200,13 @@ def main() -> None:
             "selected-read-before-clear",
             "selectedContainer-read-before-clear",
             "clear-after-retries",
+        ],
+        "bookmark_checks": [
+            "typed-bookmark-array",
+            "typed-bookmark-data",
+            "append-only-accessible-bookmarks",
+            "security-scoped-access",
+            "no-indexed-bookmark-assignment",
         ],
     }
     print("[liveprocess contract] PASS " + json.dumps(result, ensure_ascii=False))
