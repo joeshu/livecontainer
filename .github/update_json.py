@@ -5,6 +5,18 @@ import requests
 import os
 from datetime import datetime
 
+
+def github_api_headers():
+    """Return authenticated GitHub API headers when Actions provides a token."""
+    headers = {
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    token = os.environ.get("GITHUB_TOKEN", "").strip()
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    return headers
+
 def prepare_description(text):
     text = re.sub('<[^<]+?>', '', text) # Remove HTML tags
     text = re.sub(r'#{1,6}\s?', '', text) # Remove markdown header tags
@@ -16,11 +28,9 @@ def prepare_description(text):
 
 def fetch_latest_release(repo_url, is_nightly: bool):
     api_url = f"https://api.github.com/repos/{repo_url}/releases"
-    headers = {
-        "Accept": "application/vnd.github+json",
-    }
+    headers = github_api_headers()
     try:
-        response = requests.get(api_url, headers=headers)
+        response = requests.get(api_url, headers=headers, timeout=30)
         response.raise_for_status()
         releases = response.json()
         latest_release = next((
@@ -34,7 +44,7 @@ def fetch_latest_release(repo_url, is_nightly: bool):
 
 def get_file_size(url):
     try:
-        response = requests.head(url)
+        response = requests.head(url, headers=github_api_headers(), timeout=30)
         response.raise_for_status()
         return int(response.headers.get('Content-Length', 0))
     except requests.RequestException as e:
