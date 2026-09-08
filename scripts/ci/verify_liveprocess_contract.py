@@ -172,7 +172,7 @@ def main() -> None:
     # The embedded SideStore refresh path passes security-scoped bookmarks
     # through LiveProcess. Indexed assignment into a newly-created mutable
     # array is an out-of-bounds crash; require append-based handling instead.
-    if re.search(r"\\b(?:bookmarkedUrls|accessibleBookmarkedUrls)\\s*\\[", live_process_source):
+    if re.search(r"\b(?:bookmarkedUrls|accessibleBookmarkedUrls)\s*\[", live_process_source):
         fail("security-scoped bookmarks must not use indexed mutable-array assignment")
     require_all(
         live_process_source,
