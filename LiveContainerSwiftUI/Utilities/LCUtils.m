@@ -21,6 +21,13 @@
 @end
 
 @implementation LCUtils
+
+static void LCClearPendingGuestLaunchState(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    [defaults removeObjectForKey:@"selected"];
+    [defaults removeObjectForKey:@"selectedContainer"];
+    [defaults removeObjectForKey:@"launchAppUrlScheme"];
+}
 #pragma mark Certificate & password
 
 + (NSData *)certificateData {
@@ -56,8 +63,23 @@
 }
 
 + (void)launchMultitaskGuestApp:(NSString *)displayName completionHandler:(void (^)(NSNumber *pid, NSError *error))completionHandler {
+    [self launchMultitaskGuestApp:displayName remainingLiveProcessRetries:3 completionHandler:completionHandler];
+}
+
++ (void)launchMultitaskGuestApp:(NSString *)displayName remainingLiveProcessRetries:(NSUInteger)remainingRetries completionHandler:(void (^)(NSNumber *pid, NSError *error))completionHandler {
     if(!self.liveProcessBundleIdentifier) {
-        NSError *error = [NSError errorWithDomain:displayName code:2 userInfo:@{NSLocalizedDescriptionKey: @"LiveProcess extension not found. Please reinstall LiveContainer and select Keep Extensions"}];
+        if (remainingRetries > 0) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                [self launchMultitaskGuestApp:displayName remainingLiveProcessRetries:remainingRetries - 1 completionHandler:completionHandler];
+            });
+            return;
+        }
+
+        // A self-update can leave the old LiveContainer process alive while iOS replaces
+        // the app bundle/extension registration underneath it. Never leave a guest launch
+        // request armed in that stale process, otherwise the next cold launch replays it.
+        LCClearPendingGuestLaunchState();
+        NSError *error = [NSError errorWithDomain:displayName code:2 userInfo:@{NSLocalizedDescriptionKey: @"LiveProcess is not available in the current LiveContainer process. If LiveContainer was just updated, fully close and reopen it. Otherwise reinstall LiveContainer with extensions enabled."}];
         if (completionHandler) completionHandler(nil, error);
         return;
     }
