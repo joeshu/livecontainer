@@ -127,18 +127,18 @@ static NSString *LCJSONStringForDiagnostics(NSDictionary *diagnostics) {
 
 #pragma mark Multitasking
 + (NSString *)liveProcessBundleIdentifier {
-    // first check if we have LiveProcess extension in our own bundle
-    NSBundle *liveProcessBundle = [NSBundle bundleWithPath:[NSBundle.mainBundle.builtInPlugInsPath stringByAppendingPathComponent:@"LiveProcess.appex"]];
-    if(liveProcessBundle) {
-        return liveProcessBundle.bundleIdentifier;
+    NSDictionary *diagnostics = LCCollectLiveProcessDiagnostics();
+    NSLog(@"[LC] LiveProcess diagnostics: %@", LCJSONStringForDiagnostics(diagnostics));
+
+    NSString *loadedBundleIdentifier = diagnostics[@"nsBundleBundleIdentifier"];
+    if ([diagnostics[@"nsBundleLoaded"] boolValue] && loadedBundleIdentifier.length > 0) {
+        return loadedBundleIdentifier;
     }
-    
-    // in LC2, attempt to guess LC1's LiveProcess extension
-    NSString *bundleID = [NSString stringWithFormat:@"com.kdt.livecontainer.%@.LiveProcess", LCSharedUtils.teamIdentifier];
-    if([NSExtension extensionWithIdentifier:bundleID error:nil]) {
-        return bundleID;
+
+    if ([diagnostics[@"nsextensionFound"] boolValue]) {
+        return diagnostics[@"nsextensionQueryIdentifier"];
     }
-    
+
     return nil;
 }
 
@@ -159,7 +159,14 @@ static NSString *LCJSONStringForDiagnostics(NSDictionary *diagnostics) {
         // the app bundle/extension registration underneath it. Never leave a guest launch
         // request armed in that stale process, otherwise the next cold launch replays it.
         LCClearPendingGuestLaunchState();
-        NSError *error = [NSError errorWithDomain:displayName code:2 userInfo:@{NSLocalizedDescriptionKey: @"LiveProcess is not available in the current LiveContainer process. If LiveContainer was just updated, fully close and reopen it. Otherwise reinstall LiveContainer with extensions enabled."}];
+        NSDictionary *diagnostics = LCCollectLiveProcessDiagnostics();
+        NSString *diagnosticJSON = LCJSONStringForDiagnostics(diagnostics);
+        NSLog(@"[LC] LiveProcess unavailable after retries: %@", diagnosticJSON);
+        NSString *message = [NSString stringWithFormat:@"LiveProcess is not available in the current LiveContainer process. If LiveContainer was just updated, fully close and reopen it. Otherwise reinstall LiveContainer with extensions enabled. Diagnostics: %@", diagnosticJSON];
+        NSError *error = [NSError errorWithDomain:displayName code:2 userInfo:@{
+            NSLocalizedDescriptionKey: message,
+            @"LiveProcessDiagnostics": diagnostics
+        }];
         if (completionHandler) completionHandler(nil, error);
         return;
     }
