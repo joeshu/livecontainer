@@ -2,8 +2,8 @@
 set -euo pipefail
 
 workdir="$(pwd)"
-DYLIBIFY_URL="\${DYLIBIFY_URL:-https://github.com/LiveContainer/dylibify/releases/download/1.0/dylibify}"
-DYLIBIFY_SHA256="\${DYLIBIFY_SHA256:-6d23f6a2fc4d8442f87caa1161aebe6ecaafd0e8c41ce205da007efb04fc82c7}"
+DYLIBIFY_URL="${DYLIBIFY_URL:-https://github.com/LiveContainer/dylibify/releases/download/1.0/dylibify}"
+DYLIBIFY_SHA256="${DYLIBIFY_SHA256:-6d23f6a2fc4d8442f87caa1161aebe6ecaafd0e8c41ce205da007efb04fc82c7}"
 
 curl -fsSL --retry 3 "$DYLIBIFY_URL" -o dylibify
 printf '%s  %s\n' "$DYLIBIFY_SHA256" dylibify | shasum -a 256 -c -
@@ -35,7 +35,7 @@ mv Payload/LiveContainer.app/Frameworks/SideStoreSupport.framework "$tmp/SideSto
 
 zip -r "$scheme.ipa" "Payload" -x "._*" -x ".DS_Store" -x "__MACOSX"
 
-mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
+mv "$tmp/SideStoreSupport.framework" Payload/LiveContainer.app/Frameworks
 
 # put sidestore related keys into Info.plist and settings bundle
 /usr/libexec/PlistBuddy -c 'Add :ALTAppGroups array' ./Payload/LiveContainer.app/Info.plist
@@ -63,11 +63,11 @@ mv ./tmp/SideStoreSupport.framework Payload/LiveContainer.app/Frameworks
 /usr/libexec/PlistBuddy -c "Add :PreferenceSpecifiers:3:DefaultValue bool false" ./Payload/LiveContainer.app/Settings.bundle/Root.plist
 
 # Use a locally built, commit-pinned SideStore IPA for CI and release builds.
-SIDESTORE_IPA_PATH="\${SIDESTORE_IPA_PATH:-}"
-SIDESTORE_IPA_URL="\${SIDESTORE_IPA_URL:-}"
-SIDESTORE_IPA_SHA256="\${SIDESTORE_IPA_SHA256:-}"
+SIDESTORE_IPA_PATH="${SIDESTORE_IPA_PATH:-}"
+SIDESTORE_IPA_URL="${SIDESTORE_IPA_URL:-}"
+SIDESTORE_IPA_SHA256="${SIDESTORE_IPA_SHA256:-}"
 
-if [[ "\${CI:-}" == "true" ]]; then
+if [[ "${CI:-}" == "true" ]]; then
     [[ -n "$SIDESTORE_IPA_PATH" ]] || {
         echo "CI builds must provide SIDESTORE_IPA_PATH"
         exit 1
@@ -85,7 +85,7 @@ if [[ -n "$SIDESTORE_IPA_PATH" ]]; then
     }
     echo "Embedding locally built SideStore: $SIDESTORE_IPA_PATH"
     cp "$SIDESTORE_IPA_PATH" "$tmp/SideStore.ipa"
-elif [[ "\${ALLOW_REMOTE_SIDESTORE:-false}" == "true" ]]; then
+elif [[ "${ALLOW_REMOTE_SIDESTORE:-false}" == "true" ]]; then
     [[ -n "$SIDESTORE_IPA_URL" ]] || {
         echo "ALLOW_REMOTE_SIDESTORE requires SIDESTORE_IPA_URL"
         exit 1
