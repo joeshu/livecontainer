@@ -94,6 +94,11 @@ def main() -> None:
     diagnostics_body = extract_function(
         source, "static NSDictionary *LCCollectLiveProcessDiagnostics(void)"
     )
+    wrapper_body = extract_function(
+        source,
+        "+ (void)launchMultitaskGuestApp:(NSString *)displayName "
+        "completionHandler:",
+    )
     launch_body = extract_function(
         source,
         "+ (void)launchMultitaskGuestApp:(NSString *)displayName "
@@ -125,9 +130,14 @@ def main() -> None:
     )
 
     require_all(
+        wrapper_body,
+        ["remainingLiveProcessRetries:3"],
+        "LiveProcess launch wrapper",
+    )
+
+    require_all(
         launch_body,
         [
-            "remainingLiveProcessRetries:3",
             "remainingRetries > 0",
             "dispatch_after",
             "remainingRetries - 1",
@@ -159,6 +169,7 @@ def main() -> None:
         "checked_functions": [
             "LCClearPendingGuestLaunchState",
             "LCCollectLiveProcessDiagnostics",
+            "launchMultitaskGuestApp:completionHandler:",
             "launchMultitaskGuestApp:remainingLiveProcessRetries:",
         ],
         "state_clear_keys": 3,
