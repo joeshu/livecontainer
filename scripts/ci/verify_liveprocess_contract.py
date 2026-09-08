@@ -17,6 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Utilities/LCUtils.m"
 LIVE_PROCESS_SOURCE_PATH = ROOT / "LiveProcess/main.m"
+SIDESTORE_REFRESH_SOURCE_PATH = ROOT / "SideStoreSupport/SideStore.swift"
 
 
 def fail(message: str) -> "NoReturn":
@@ -90,9 +91,12 @@ def main() -> None:
         fail(f"missing source: {SOURCE_PATH.relative_to(ROOT)}")
     if not LIVE_PROCESS_SOURCE_PATH.is_file():
         fail(f"missing source: {LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)}")
+    if not SIDESTORE_REFRESH_SOURCE_PATH.is_file():
+        fail(f"missing source: {SIDESTORE_REFRESH_SOURCE_PATH.relative_to(ROOT)}")
 
     source = SOURCE_PATH.read_text(encoding="utf-8")
     live_process_source = LIVE_PROCESS_SOURCE_PATH.read_text(encoding="utf-8")
+    sidestore_refresh_source = SIDESTORE_REFRESH_SOURCE_PATH.read_text(encoding="utf-8")
     clear_body = extract_function(
         source, "static void LCClearPendingGuestLaunchState(void)"
     )
@@ -185,9 +189,28 @@ def main() -> None:
         "security-scoped bookmark handling",
     )
 
+    if "UnsafeContinuation" in sidestore_refresh_source:
+        fail("embedded SideStore refresh bridge must use checked continuations")
+    if "bookmarkForURL(sideStoreHomeURL)!" in sidestore_refresh_source:
+        fail("embedded SideStore refresh bridge must not force-unwrap bookmark creation")
+    if "self.client?.refreshAllApps" in sidestore_refresh_source:
+        fail("embedded SideStore refresh bridge must validate its XPC client before calling it")
+    require_all(
+        sidestore_refresh_source,
+        [
+            "withCheckedThrowingContinuation",
+            "setRefreshContinuation",
+            "resumeRefresh",
+            "SideStore refresh timed out.",
+            "The embedded SideStore XPC client is unavailable.",
+        ],
+        "embedded SideStore refresh bridge",
+    )
+
     result = {
         "source": str(SOURCE_PATH.relative_to(ROOT)),
         "live_process_source": str(LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)),
+        "sidestore_refresh_source": str(SIDESTORE_REFRESH_SOURCE_PATH.relative_to(ROOT)),
         "checked_functions": [
             "LCClearPendingGuestLaunchState",
             "LCCollectLiveProcessDiagnostics",
@@ -207,6 +230,12 @@ def main() -> None:
             "append-only-accessible-bookmarks",
             "security-scoped-access",
             "no-indexed-bookmark-assignment",
+        ],
+        "bridge_checks": [
+            "checked-continuations",
+            "guarded-bookmark-creation",
+            "guarded-xpc-client",
+            "refresh-timeout",
         ],
     }
     print("[liveprocess contract] PASS " + json.dumps(result, ensure_ascii=False))
