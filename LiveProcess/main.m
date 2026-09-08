@@ -66,19 +66,51 @@ int LiveProcessMain(int argc, char *argv[]) {
     [lcUserDefaults setObject:appInfo[@"selected"] forKey:@"selected"];
     [lcUserDefaults setObject:appInfo[@"selectedContainer"] forKey:@"selectedContainer"];
     
-    bool access = false;
-    NSArray* bookmarks = appInfo[@"bookmarks"];
-    NSMutableArray<NSURL *>* bookmarkedUrls = [NSMutableArray array];
-    for(int i = 0; i < bookmarks.count; i++) {
-        bool isStale = false;
-        NSError* error = nil;
-        bookmarkedUrls[i] = [NSURL URLByResolvingBookmarkData:bookmarks[i] options:0 relativeToURL:nil bookmarkDataIsStale:&isStale error:&error];
-        access = [bookmarkedUrls[i] startAccessingSecurityScopedResource];
+    // Resolve every security-scoped bookmark defensively. Do not assign into an
+    // empty NSMutableArray by indexed subscript: that raises NSRangeException
+    // before the embedded SideStore XPC bridge can be established.
+    NSArray *bookmarks = [appInfo[@"bookmarks"] isKindOfClass:NSArray.class]
+        ? appInfo[@"bookmarks"]
+        : @[];
+    NSMutableArray<NSURL *> *accessibleBookmarkedUrls =
+        [NSMutableArray arrayWithCapacity:bookmarks.count];
+    for (id bookmark in bookmarks) {
+        if (![bookmark isKindOfClass:NSData.class]) {
+            NSLog(@"[LiveProcess] Ignoring invalid security-scoped bookmark: %@", bookmark);
+            continue;
+        }
+
+        BOOL isStale = NO;
+        NSError *error = nil;
+        NSURL *resolvedURL = [NSURL URLByResolvingBookmarkData:(NSData *)bookmark
+                                                         options:0
+                                                   relativeToURL:nil
+                                             bookmarkDataIsStale:&isStale
+                                                           error:&error];
+        if (!resolvedURL) {
+            NSLog(@"[LiveProcess] Failed to resolve security-scoped bookmark: %@",
+                  error.localizedDescription ?: @"unknown error");
+            continue;
+        }
+
+        if ([resolvedURL startAccessingSecurityScopedResource]) {
+            [accessibleBookmarkedUrls addObject:resolvedURL];
+        } else {
+            NSLog(@"[LiveProcess] Failed to access security-scoped bookmark: %@",
+                  resolvedURL.path);
+        }
+
+        if (isStale) {
+            NSLog(@"[LiveProcess] Resolved a stale security-scoped bookmark: %@",
+                  resolvedURL.path);
+        }
     }
+    BOOL access = accessibleBookmarkedUrls.count > 0;
     
     if ([appInfo[@"selected"] isEqualToString:@"builtinSideStore"]) {
-        if(access && bookmarkedUrls.count > 0) {
-            [lcUserDefaults setObject:bookmarkedUrls.firstObject.path forKey:@"specifiedSideStoreContainerPath"];
+        if(access) {
+            [lcUserDefaults setObject:accessibleBookmarkedUrls.firstObject.path
+                               forKey:@"specifiedSideStoreContainerPath"];
         }
         NSXPCListenerEndpoint* endpoint = appInfo[@"endpoint"];
 
