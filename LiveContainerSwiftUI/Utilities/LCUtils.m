@@ -21,6 +21,93 @@
 @end
 
 @implementation LCUtils
+
+static void LCClearPendingGuestLaunchState(void) {
+    NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+    [defaults removeObjectForKey:@"selected"];
+    [defaults removeObjectForKey:@"selectedContainer"];
+    [defaults removeObjectForKey:@"launchAppUrlScheme"];
+}
+
+static NSDictionary *LCCollectLiveProcessDiagnostics(void) {
+    NSBundle *mainBundle = NSBundle.mainBundle;
+    NSString *builtInsPath = mainBundle.builtInPlugInsPath ?: @"";
+    NSString *liveProcessPath = builtInsPath.length
+        ? [builtInsPath stringByAppendingPathComponent:@"LiveProcess.appex"]
+        : @"";
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+
+    BOOL isDirectory = NO;
+    BOOL bundlePathExists = liveProcessPath.length
+        && [fileManager fileExistsAtPath:liveProcessPath isDirectory:&isDirectory];
+    NSString *infoPath = liveProcessPath.length
+        ? [liveProcessPath stringByAppendingPathComponent:@"Info.plist"]
+        : @"";
+    BOOL infoPlistExists = infoPath.length && [fileManager fileExistsAtPath:infoPath];
+    NSDictionary *info = infoPath.length
+        ? [NSDictionary dictionaryWithContentsOfFile:infoPath]
+        : nil;
+
+    NSString *infoBundleIdentifier = [info[@"CFBundleIdentifier"] isKindOfClass:NSString.class]
+        ? info[@"CFBundleIdentifier"]
+        : @"";
+    NSString *executableName = [info[@"CFBundleExecutable"] isKindOfClass:NSString.class]
+        ? info[@"CFBundleExecutable"]
+        : @"";
+    NSString *executablePath = (liveProcessPath.length && executableName.length)
+        ? [liveProcessPath stringByAppendingPathComponent:executableName]
+        : @"";
+    BOOL executableExists = executablePath.length && [fileManager fileExistsAtPath:executablePath];
+    BOOL executableIsExecutable = executablePath.length && [fileManager isExecutableFileAtPath:executablePath];
+
+    NSBundle *liveProcessBundle = liveProcessPath.length
+        ? [NSBundle bundleWithPath:liveProcessPath]
+        : nil;
+    NSString *loadedBundleIdentifier = liveProcessBundle.bundleIdentifier ?: @"";
+
+    NSString *teamIdentifier = LCSharedUtils.teamIdentifier ?: @"";
+    NSString *legacyBundleIdentifier = teamIdentifier.length
+        ? [NSString stringWithFormat:@"com.kdt.livecontainer.%@.LiveProcess", teamIdentifier]
+        : @"";
+    NSString *queryIdentifier = infoBundleIdentifier.length
+        ? infoBundleIdentifier
+        : (loadedBundleIdentifier.length ? loadedBundleIdentifier : legacyBundleIdentifier);
+
+    NSError *extensionError = nil;
+    NSExtension *extension = queryIdentifier.length
+        ? [NSExtension extensionWithIdentifier:queryIdentifier error:&extensionError]
+        : nil;
+
+    return @{
+        @"mainBundlePath": mainBundle.bundlePath ?: @"",
+        @"builtInPlugInsPath": builtInsPath,
+        @"liveProcessBundlePath": liveProcessPath,
+        @"bundlePathExists": @(bundlePathExists),
+        @"bundleIsDirectory": @(isDirectory),
+        @"infoPlistPath": infoPath,
+        @"infoPlistExists": @(infoPlistExists),
+        @"infoPlistReadable": @(info != nil),
+        @"infoPlistBundleIdentifier": infoBundleIdentifier,
+        @"infoPlistExecutable": executableName,
+        @"executablePath": executablePath,
+        @"executableExists": @(executableExists),
+        @"executableIsExecutable": @(executableIsExecutable),
+        @"nsBundleLoaded": @(liveProcessBundle != nil),
+        @"nsBundleBundleIdentifier": loadedBundleIdentifier,
+        @"nsextensionQueryIdentifier": queryIdentifier,
+        @"nsextensionFound": @(extension != nil),
+        @"nsextensionErrorDomain": extensionError.domain ?: @"",
+        @"nsextensionErrorCode": @(extensionError.code),
+        @"nsextensionError": extensionError.localizedDescription ?: @""
+    };
+}
+
+static NSString *LCJSONStringForDiagnostics(NSDictionary *diagnostics) {
+    NSData *data = [NSJSONSerialization dataWithJSONObject:diagnostics options:0 error:nil];
+    return data
+        ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
+        : diagnostics.description;
+}
 #pragma mark Certificate & password
 
 + (NSData *)certificateData {
@@ -40,24 +127,46 @@
 
 #pragma mark Multitasking
 + (NSString *)liveProcessBundleIdentifier {
-    // first check if we have LiveProcess extension in our own bundle
-    NSBundle *liveProcessBundle = [NSBundle bundleWithPath:[NSBundle.mainBundle.builtInPlugInsPath stringByAppendingPathComponent:@"LiveProcess.appex"]];
-    if(liveProcessBundle) {
-        return liveProcessBundle.bundleIdentifier;
+    NSDictionary *diagnostics = LCCollectLiveProcessDiagnostics();
+    NSLog(@"[LC] LiveProcess diagnostics: %@", LCJSONStringForDiagnostics(diagnostics));
+
+    NSString *loadedBundleIdentifier = diagnostics[@"nsBundleBundleIdentifier"];
+    if ([diagnostics[@"nsBundleLoaded"] boolValue] && loadedBundleIdentifier.length > 0) {
+        return loadedBundleIdentifier;
     }
-    
-    // in LC2, attempt to guess LC1's LiveProcess extension
-    NSString *bundleID = [NSString stringWithFormat:@"com.kdt.livecontainer.%@.LiveProcess", LCSharedUtils.teamIdentifier];
-    if([NSExtension extensionWithIdentifier:bundleID error:nil]) {
-        return bundleID;
+
+    if ([diagnostics[@"nsextensionFound"] boolValue]) {
+        return diagnostics[@"nsextensionQueryIdentifier"];
     }
-    
+
     return nil;
 }
 
 + (void)launchMultitaskGuestApp:(NSString *)displayName completionHandler:(void (^)(NSNumber *pid, NSError *error))completionHandler {
+    [self launchMultitaskGuestApp:displayName remainingLiveProcessRetries:3 completionHandler:completionHandler];
+}
+
++ (void)launchMultitaskGuestApp:(NSString *)displayName remainingLiveProcessRetries:(NSUInteger)remainingRetries completionHandler:(void (^)(NSNumber *pid, NSError *error))completionHandler {
     if(!self.liveProcessBundleIdentifier) {
-        NSError *error = [NSError errorWithDomain:displayName code:2 userInfo:@{NSLocalizedDescriptionKey: @"LiveProcess extension not found. Please reinstall LiveContainer and select Keep Extensions"}];
+        if (remainingRetries > 0) {
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(350 * NSEC_PER_MSEC)), dispatch_get_main_queue(), ^{
+                [self launchMultitaskGuestApp:displayName remainingLiveProcessRetries:remainingRetries - 1 completionHandler:completionHandler];
+            });
+            return;
+        }
+
+        // A self-update can leave the old LiveContainer process alive while iOS replaces
+        // the app bundle/extension registration underneath it. Never leave a guest launch
+        // request armed in that stale process, otherwise the next cold launch replays it.
+        LCClearPendingGuestLaunchState();
+        NSDictionary *diagnostics = LCCollectLiveProcessDiagnostics();
+        NSString *diagnosticJSON = LCJSONStringForDiagnostics(diagnostics);
+        NSLog(@"[LC] LiveProcess unavailable after retries: %@", diagnosticJSON);
+        NSString *message = [NSString stringWithFormat:@"LiveProcess is not available in the current LiveContainer process. If LiveContainer was just updated, fully close and reopen it. Otherwise reinstall LiveContainer with extensions enabled. Diagnostics: %@", diagnosticJSON];
+        NSError *error = [NSError errorWithDomain:displayName code:2 userInfo:@{
+            NSLocalizedDescriptionKey: message,
+            @"LiveProcessDiagnostics": diagnostics
+        }];
         if (completionHandler) completionHandler(nil, error);
         return;
     }
