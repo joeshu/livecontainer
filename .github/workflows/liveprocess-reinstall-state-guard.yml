@@ -1,0 +1,21 @@
+name: LiveProcess Reinstall State Guard
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verify-liveprocess-reinstall-state:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify transient LiveProcess handling
+        run: |
+          set -euo pipefail
+          FILE='LiveContainerSwiftUI/Utilities/LCUtils.m'
+          grep -F 'LCClearPendingGuestLaunchState' "$FILE"
+          grep -F 'remainingLiveProcessRetries:3' "$FILE"
+          grep -F 'removeObjectForKey:@"selected"' "$FILE"
+          grep -F 'removeObjectForKey:@"selectedContainer"' "$FILE"
+          grep -F 'removeObjectForKey:@"launchAppUrlScheme"' "$FILE"
+          grep -F 'fully close and reopen it' "$FILE"
