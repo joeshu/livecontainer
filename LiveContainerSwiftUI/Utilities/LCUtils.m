@@ -28,6 +28,86 @@ static void LCClearPendingGuestLaunchState(void) {
     [defaults removeObjectForKey:@"selectedContainer"];
     [defaults removeObjectForKey:@"launchAppUrlScheme"];
 }
+
+static NSDictionary *LCCollectLiveProcessDiagnostics(void) {
+    NSBundle *mainBundle = NSBundle.mainBundle;
+    NSString *builtInsPath = mainBundle.builtInPlugInsPath ?: @"";
+    NSString *liveProcessPath = builtInsPath.length
+        ? [builtInsPath stringByAppendingPathComponent:@"LiveProcess.appex"]
+        : @"";
+    NSFileManager *fileManager = NSFileManager.defaultManager;
+
+    BOOL isDirectory = NO;
+    BOOL bundlePathExists = liveProcessPath.length
+        && [fileManager fileExistsAtPath:liveProcessPath isDirectory:&isDirectory];
+    NSString *infoPath = liveProcessPath.length
+        ? [liveProcessPath stringByAppendingPathComponent:@"Info.plist"]
+        : @"";
+    BOOL infoPlistExists = infoPath.length && [fileManager fileExistsAtPath:infoPath];
+    NSDictionary *info = infoPath.length
+        ? [NSDictionary dictionaryWithContentsOfFile:infoPath]
+        : nil;
+
+    NSString *infoBundleIdentifier = [info[@"CFBundleIdentifier"] isKindOfClass:NSString.class]
+        ? info[@"CFBundleIdentifier"]
+        : @"";
+    NSString *executableName = [info[@"CFBundleExecutable"] isKindOfClass:NSString.class]
+        ? info[@"CFBundleExecutable"]
+        : @"";
+    NSString *executablePath = (liveProcessPath.length && executableName.length)
+        ? [liveProcessPath stringByAppendingPathComponent:executableName]
+        : @"";
+    BOOL executableExists = executablePath.length && [fileManager fileExistsAtPath:executablePath];
+    BOOL executableIsExecutable = executablePath.length && [fileManager isExecutableFileAtPath:executablePath];
+
+    NSBundle *liveProcessBundle = liveProcessPath.length
+        ? [NSBundle bundleWithPath:liveProcessPath]
+        : nil;
+    NSString *loadedBundleIdentifier = liveProcessBundle.bundleIdentifier ?: @"";
+
+    NSString *teamIdentifier = LCSharedUtils.teamIdentifier ?: @"";
+    NSString *legacyBundleIdentifier = teamIdentifier.length
+        ? [NSString stringWithFormat:@"com.kdt.livecontainer.%@.LiveProcess", teamIdentifier]
+        : @"";
+    NSString *queryIdentifier = infoBundleIdentifier.length
+        ? infoBundleIdentifier
+        : (loadedBundleIdentifier.length ? loadedBundleIdentifier : legacyBundleIdentifier);
+
+    NSError *extensionError = nil;
+    NSExtension *extension = queryIdentifier.length
+        ? [NSExtension extensionWithIdentifier:queryIdentifier error:&extensionError]
+        : nil;
+
+    return @{
+        @"mainBundlePath": mainBundle.bundlePath ?: @"",
+        @"builtInPlugInsPath": builtInsPath,
+        @"liveProcessBundlePath": liveProcessPath,
+        @"bundlePathExists": @(bundlePathExists),
+        @"bundleIsDirectory": @(isDirectory),
+        @"infoPlistPath": infoPath,
+        @"infoPlistExists": @(infoPlistExists),
+        @"infoPlistReadable": @(info != nil),
+        @"infoPlistBundleIdentifier": infoBundleIdentifier,
+        @"infoPlistExecutable": executableName,
+        @"executablePath": executablePath,
+        @"executableExists": @(executableExists),
+        @"executableIsExecutable": @(executableIsExecutable),
+        @"nsBundleLoaded": @(liveProcessBundle != nil),
+        @"nsBundleBundleIdentifier": loadedBundleIdentifier,
+        @"nsextensionQueryIdentifier": queryIdentifier,
+        @"nsextensionFound": @(extension != nil),
+        @"nsextensionErrorDomain": extensionError.domain ?: @"",
+        @"nsextensionErrorCode": @(extensionError.code),
+        @"nsextensionError": extensionError.localizedDescription ?: @""
+    };
+}
+
+static NSString *LCJSONStringForDiagnostics(NSDictionary *diagnostics) {
+    NSData *data = [NSJSONSerialization dataWithJSONObject:diagnostics options:0 error:nil];
+    return data
+        ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
+        : diagnostics.description;
+}
 #pragma mark Certificate & password
 
 + (NSData *)certificateData {
