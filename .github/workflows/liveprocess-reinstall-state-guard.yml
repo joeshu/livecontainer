@@ -9,21 +9,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Verify transient LiveProcess handling
-        run: |
-          set -euo pipefail
-          FILE='LiveContainerSwiftUI/Utilities/LCUtils.m'
-          grep -F 'LCClearPendingGuestLaunchState' "$FILE"
-          grep -F 'remainingLiveProcessRetries:3' "$FILE"
-          grep -F 'removeObjectForKey:@"selected"' "$FILE"
-          grep -F 'removeObjectForKey:@"selectedContainer"' "$FILE"
-          grep -F 'removeObjectForKey:@"launchAppUrlScheme"' "$FILE"
-          grep -F 'fully close and reopen it' "$FILE"
-          grep -F 'LCCollectLiveProcessDiagnostics' "$FILE"
-          grep -F 'bundlePathExists' "$FILE"
-          grep -F 'infoPlistExists' "$FILE"
-          grep -F 'executableExists' "$FILE"
-          grep -F 'nsBundleLoaded' "$FILE"
-          grep -F 'nsextensionFound' "$FILE"
-          grep -F 'nsextensionError' "$FILE"
-          grep -F 'LiveProcessDiagnostics' "$FILE"
+      - name: Verify executable LiveProcess state contract
+        run: python3 scripts/ci/verify_liveprocess_contract.py
