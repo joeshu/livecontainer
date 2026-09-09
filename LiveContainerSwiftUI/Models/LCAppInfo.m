@@ -75,25 +75,32 @@
 }
 
 - (NSMutableArray<NSString *>*)urlSchemes {
-    // find all url schemes
-    NSMutableArray* urlSchemes = [[NSMutableArray alloc] init];
-    int nowSchemeCount = 0;
-    if (_infoPlist[@"CFBundleURLTypes"]) {
-        NSMutableArray* urlTypes = _infoPlist[@"CFBundleURLTypes"];
+    // App metadata is user-provided and can be malformed. Never assume that
+    // CFBundleURLTypes or its entries have the expected plist container types.
+    NSMutableArray<NSString *> *urlSchemes = [NSMutableArray array];
+    id rawURLTypes = _infoPlist[@"CFBundleURLTypes"];
+    if (![rawURLTypes isKindOfClass:NSArray.class]) {
+        return urlSchemes;
+    }
 
-        for(int i = 0; i < [urlTypes count]; ++i) {
-            NSMutableDictionary* nowUrlType = [urlTypes objectAtIndex:i];
-            if (!nowUrlType[@"CFBundleURLSchemes"]){
-                continue;
-            }
-            NSMutableArray *schemes = nowUrlType[@"CFBundleURLSchemes"];
-            for(int j = 0; j < [schemes count]; ++j) {
-                [urlSchemes insertObject:[schemes objectAtIndex:j] atIndex:nowSchemeCount];
-                ++nowSchemeCount;
+    for (id rawURLType in (NSArray *)rawURLTypes) {
+        if (![rawURLType isKindOfClass:NSDictionary.class]) {
+            continue;
+        }
+
+        id rawSchemes = ((NSDictionary *)rawURLType)[@"CFBundleURLSchemes"];
+        if (![rawSchemes isKindOfClass:NSArray.class]) {
+            continue;
+        }
+
+        for (id rawScheme in (NSArray *)rawSchemes) {
+            if ([rawScheme isKindOfClass:NSString.class] &&
+                ((NSString *)rawScheme).length > 0) {
+                [urlSchemes addObject:rawScheme];
             }
         }
     }
-    
+
     return urlSchemes;
 }
 
