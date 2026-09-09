@@ -298,7 +298,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             Text(errorInfo)
         }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { fileUrls in
-            guard let fileURL = fileUrls.first else { return }\n            presentInstallMode(for: fileURL)
+            guard let fileURL = fileUrls.first else { return }
+            presentInstallMode(for: fileURL)
         }, onDismiss: {
             choosingIPA = false
         })
@@ -769,7 +770,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 signSuccess = success
                 c.resume()
             }, progressHandler: { signProgress in
-                if let signProgress {\n                    installProgress.addChild(signProgress, withPendingUnitCount: 20)\n                }
+                if let signProgress {
+                    installProgress.addChild(signProgress, withPendingUnitCount: 20)
+                }
             }, forceSign: false)
         })
         
