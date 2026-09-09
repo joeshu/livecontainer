@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Utilities/LCUtils.m"
 LIVE_PROCESS_SOURCE_PATH = ROOT / "LiveProcess/main.m"
 SIDESTORE_REFRESH_SOURCE_PATH = ROOT / "SideStoreSupport/SideStore.swift"
+APP_INFO_SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Models/LCAppInfo.m"
+APP_LIST_SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Views/AppList/LCAppListView.swift"
 
 
 def fail(message: str) -> "NoReturn":
@@ -93,10 +95,16 @@ def main() -> None:
         fail(f"missing source: {LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)}")
     if not SIDESTORE_REFRESH_SOURCE_PATH.is_file():
         fail(f"missing source: {SIDESTORE_REFRESH_SOURCE_PATH.relative_to(ROOT)}")
+    if not APP_INFO_SOURCE_PATH.is_file():
+        fail(f"missing source: {APP_INFO_SOURCE_PATH.relative_to(ROOT)}")
+    if not APP_LIST_SOURCE_PATH.is_file():
+        fail(f"missing source: {APP_LIST_SOURCE_PATH.relative_to(ROOT)}")
 
     source = SOURCE_PATH.read_text(encoding="utf-8")
     live_process_source = LIVE_PROCESS_SOURCE_PATH.read_text(encoding="utf-8")
     sidestore_refresh_source = SIDESTORE_REFRESH_SOURCE_PATH.read_text(encoding="utf-8")
+    app_info_source = APP_INFO_SOURCE_PATH.read_text(encoding="utf-8")
+    app_list_source = APP_LIST_SOURCE_PATH.read_text(encoding="utf-8")
     clear_body = extract_function(
         source, "static void LCClearPendingGuestLaunchState(void)"
     )
@@ -189,6 +197,25 @@ def main() -> None:
         "security-scoped bookmark handling",
     )
 
+    require_all(
+        app_info_source,
+        [
+            "isKindOfClass:NSArray.class",
+            "isKindOfClass:NSDictionary.class",
+            "isKindOfClass:NSString.class",
+            "[urlSchemes addObject:rawScheme]",
+        ],
+        "app URL scheme metadata parsing",
+    )
+    if "objectAtIndex:" in app_info_source.split("- (NSMutableArray<NSString *>*)urlSchemes", 1)[1].split("- (NSString*)displayName", 1)[0]:
+        fail("app URL scheme parsing must not index malformed plist arrays")
+    if "as! [Any]" in app_list_source:
+        fail("app URL scheme consumers must not force-cast malformed metadata")
+    if "fileUrls[0]" in app_list_source:
+        fail("file importer callback must tolerate an empty selection")
+    if "signProgress!" in app_list_source:
+        fail("install progress callback must tolerate a missing progress object")
+
     if "UnsafeContinuation" in sidestore_refresh_source:
         fail("embedded SideStore refresh bridge must use checked continuations")
     if "bookmarkForURL(sideStoreHomeURL)!" in sidestore_refresh_source:
@@ -211,6 +238,8 @@ def main() -> None:
         "source": str(SOURCE_PATH.relative_to(ROOT)),
         "live_process_source": str(LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)),
         "sidestore_refresh_source": str(SIDESTORE_REFRESH_SOURCE_PATH.relative_to(ROOT)),
+        "app_info_source": str(APP_INFO_SOURCE_PATH.relative_to(ROOT)),
+        "app_list_source": str(APP_LIST_SOURCE_PATH.relative_to(ROOT)),
         "checked_functions": [
             "LCClearPendingGuestLaunchState",
             "LCCollectLiveProcessDiagnostics",
@@ -230,6 +259,15 @@ def main() -> None:
             "append-only-accessible-bookmarks",
             "security-scoped-access",
             "no-indexed-bookmark-assignment",
+        ],
+        "metadata_checks": [
+            "typed-url-types",
+            "typed-url-type-entry",
+            "typed-url-scheme",
+            "append-only-url-schemes",
+            "empty-file-selection",
+            "no-force-cast-url-schemes",
+            "optional-sign-progress",
         ],
         "bridge_checks": [
             "checked-continuations",

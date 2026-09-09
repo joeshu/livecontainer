@@ -298,7 +298,8 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             Text(errorInfo)
         }
         .betterFileImporter(isPresented: $choosingIPA, types: [.ipa, .tipa], multiple: false, callback: { fileUrls in
-            presentInstallMode(for: fileUrls[0])
+            guard let fileURL = fileUrls.first else { return }
+            presentInstallMode(for: fileURL)
         }, onDismiss: {
             choosingIPA = false
         })
@@ -769,7 +770,9 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 signSuccess = success
                 c.resume()
             }, progressHandler: { signProgress in
-                installProgress.addChild(signProgress!, withPendingUnitCount: 20)
+                if let signProgress {
+                    installProgress.addChild(signProgress, withPendingUnitCount: 20)
+                }
             }, forceSign: false)
         })
         
@@ -834,7 +837,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 // add url schemes
                 if let urlSchemes = finalNewApp.urlSchemes(), urlSchemes.count > 0 {
                     UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")
-                        .addObjects(from: urlSchemes as! [Any])
+                        .addObjects(from: Array(urlSchemes))
                 }
             }
 
@@ -1054,7 +1057,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     sharedModel.hiddenApps.append(app)
                 }
                 UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")
-                    .removeObjects(in: app.appInfo.urlSchemes() as! [Any])
+                    .removeObjects(in: Array(app.appInfo.urlSchemes()))
             } else {
                 sharedModel.hiddenApps.removeAll { now in
                     return app == now
@@ -1063,7 +1066,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     sharedModel.apps.append(app)
                 }
                 UserDefaults.lcShared().mutableArrayValue(forKey: "LCGuestURLSchemes")
-                    .addObjects(from: app.appInfo.urlSchemes() as! [Any])
+                    .addObjects(from: Array(app.appInfo.urlSchemes()))
             }
             
         }
