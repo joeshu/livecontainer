@@ -242,18 +242,42 @@ void LCOpenWebPage(NSString* webPageUrlString, NSString* originalUrl) {
 }
 
 void LCOpenSideStoreURL(NSURL* sidestoreUrl) {
-    if ([NSUserDefaults.lcUserDefaults boolForKey:@"LCSwitchAppWithoutAsking"]) {
-        [NSUserDefaults.lcUserDefaults setObject:sidestoreUrl.absoluteString forKey:@"launchAppUrlScheme"];
-        [NSUserDefaults.lcUserDefaults setObject:@"builtinSideStore" forKey:@"selected"];
+    void (^launchSideStore)(void) = ^{
+        NSUserDefaults *defaults = NSUserDefaults.lcUserDefaults;
+        if (!defaults) {
+            return;
+        }
+        // Bootstrap now consumes one atomic request. The old selected/
+        // launchAppUrlScheme pair is intentionally not used: it is cleared as
+        // legacy state and would make the current app terminate without
+        // launching SideStore.
+        NSMutableDictionary *pending = [@{
+            @"bundleName": @"builtinSideStore",
+            @"createdAt": [NSDate date],
+            @"requestID": [NSUUID UUID].UUIDString
+        } mutableCopy];
+        if (sidestoreUrl.absoluteString.length > 0) {
+            pending[@"openURL"] = sidestoreUrl.absoluteString;
+        }
+        for (NSString *key in @[@"LCPendingLaunch", @"selected", @"selectedContainer",
+                                @"launchAppUrlScheme", @"selectedLaunchRequestID",
+                                @"selectedLaunchDate"]) {
+            [defaults removeObjectForKey:key];
+        }
+        [defaults setObject:pending forKey:@"LCPendingLaunch"];
+        [defaults synchronize];
         [NSClassFromString(@"LCSharedUtils") launchToGuestAppWithClassicMode:0];
+    };
+
+    if ([NSUserDefaults.lcUserDefaults boolForKey:@"LCSwitchAppWithoutAsking"]) {
+        launchSideStore();
+        return;
     }
     NSString *message = [@"lc.guestTweak.appSwitchTip %@" localizeWithFormat:@"SideStore"];
     UIWindow *window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"LiveContainer" message:message preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:@"lc.common.ok".loc style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
-        [NSUserDefaults.lcUserDefaults setObject:sidestoreUrl.absoluteString forKey:@"launchAppUrlScheme"];
-        [NSUserDefaults.lcUserDefaults setObject:@"builtinSideStore" forKey:@"selected"];
-        [NSClassFromString(@"LCSharedUtils") launchToGuestAppWithClassicMode:0];
+        launchSideStore();
     }];
     [alert addAction:okAction];
     
