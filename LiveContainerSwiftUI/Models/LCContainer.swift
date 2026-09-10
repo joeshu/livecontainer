@@ -158,7 +158,7 @@ class LCContainer : ObservableObject, Hashable {
                               userInfo: [NSLocalizedDescriptionKey: "Container bookmark must resolve to a directory"])
             }
             try validateExternalMetadata(at: url, expectedAppIdentifier: appIdentifier)
-            return try url.bookmarkData(options: [.withSecurityScope],
+            return try url.bookmarkData(options: URL.BookmarkCreationOptions(rawValue: 1 << 11),
                                         includingResourceValuesForKeys: nil,
                                         relativeTo: nil)
         }
@@ -240,7 +240,7 @@ class LCContainer : ObservableObject, Hashable {
             do {
                 var isStale = false
                 let url = try URL(resolvingBookmarkData: bookmarkData,
-                                  options: [.withSecurityScope],
+                                  options: URL.BookmarkResolutionOptions(rawValue: 1 << 10),
                                   relativeTo: nil,
                                   bookmarkDataIsStale: &isStale)
                 guard url.isFileURL, !url.path.isEmpty else {
