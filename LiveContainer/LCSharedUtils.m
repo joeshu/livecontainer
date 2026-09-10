@@ -58,7 +58,7 @@ static void LCClearPendingLaunchKeys(NSUserDefaults *defaults) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
 #if !TARGET_OS_SIMULATOR
-        SecTaskRef taskSelf = SecTaskCreateFromSelf(NULL);
+        void *taskSelf = SecTaskCreateFromSelf(NULL);
         CFErrorRef error = NULL;
         CFTypeRef cfans = taskSelf
             ? SecTaskCopyValueForEntitlement(taskSelf, CFSTR("com.apple.developer.team-identifier"), &error)
@@ -122,7 +122,7 @@ static BOOL LCIsKnownStoreAppGroup(NSString *candidate, NSString *teamIdentifier
 
 static NSArray<NSString *> *LCApplicationGroupEntitlements(void) {
     CFErrorRef error = NULL;
-    SecTaskRef task = SecTaskCreateFromSelf(NULL);
+    void *task = SecTaskCreateFromSelf(NULL);
     if (!task) {
         return @[];
     }
