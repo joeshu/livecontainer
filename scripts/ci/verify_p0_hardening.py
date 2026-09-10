@@ -28,6 +28,7 @@ def main() -> int:
     archive = read("LiveContainerSwiftUI/Utilities/unarchive.m")
     install = read("LiveContainerSwiftUI/Views/AppList/LCAppListView.swift")
     shared = read("LiveContainer/LCSharedUtils.m")
+    tweak_loader = read("TweakLoader/TweakLoader.m")
 
     for flag in (
         "ARCHIVE_EXTRACT_SECURE_NODOTDOT",
@@ -56,6 +57,15 @@ def main() -> int:
     require(shared, "LCIsSafePathComponent", "native deep-link component guard")
     require(shared, "appBundle == nil", "bundle lookup failure guard")
     require(shared, "LCAppInfo.plist", "bundle metadata validation")
+    for guard in (
+        "LCPathIsUnderRoot",
+        "LCPathHasSymlinkComponent",
+        "LCIsRegularFile",
+        "RTLD_LOCAL",
+        "invalid CFBundleExecutable",
+    ):
+        require(tweak_loader, guard, f"tweak-loader guard {guard}")
+    forbid(tweak_loader, "loadTweakAtURL(fileURL)", "unchecked tweak loader call")
 
     print("PASS: P0 hardening static contracts")
     return 0
