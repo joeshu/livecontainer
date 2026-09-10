@@ -23,31 +23,31 @@
 
 ### Phase 1：P0 路径边界
 
-- [ ] `bundle-name` 仅允许已注册 bundle，禁止 URL 直接成为路径
-- [ ] `container-folder-name` 仅允许目标 App 已注册容器
+- [ ] `bundle-name` 仅允许已注册 bundle，禁止 URL 直接成为路径（已完成首层组件校验；注册表匹配待完成）
+- [ ] `container-folder-name` 仅允许目标 App 已注册容器（已完成首层组件校验；归属匹配待完成）
 - [ ] App Group identifier 做安全组件与 entitlement 映射
 - [ ] 所有实际路径做 canonical containment
 - [ ] 外部 bookmark 失败禁止回退到内部同名容器
 
 ### Phase 2：P0 IPA 安装事务
 
-- [ ] 解压拒绝绝对路径、`..`、symlink、hardlink、special file
-- [ ] 启用 libarchive 安全选项
-- [ ] 限制条目数、单文件大小、总解压大小、目录深度
-- [ ] 解压失败必须返回失败并清理 staging
-- [ ] staging 使用每操作唯一目录
-- [ ] patch/sign/verify 成功后才替换正式 App
-- [ ] 替换失败恢复旧 App
-- [ ] 不删除调用者拥有的源 IPA
+- [x] 解压拒绝绝对路径、`..`、symlink、hardlink、special file（待 Actions/真机验证）
+- [x] 启用 libarchive 安全选项（待 Actions/真机验证）
+- [x] 限制条目数、单文件大小、总解压大小、目录深度（待 Actions/真机验证）
+- [x] 解压失败必须返回失败并清理 staging（静态验证；运行时待验证）
+- [x] staging 使用每操作唯一目录（静态验证；运行时待验证）
+- [x] patch/sign/verify 成功后才替换正式 App（静态验证；签名/真机待验证）
+- [x] 替换失败恢复旧 App（静态验证；异常注入待验证）
+- [x] 不删除调用者拥有的源 IPA
 
 ### Phase 3：启动与并发状态
 
 - [ ] `runApp` 使用 request ID + actor/串行状态机
 - [ ] JIT 失败/取消清理全部 pending launch 状态
-- [ ] classic launch 串行重试且只一次性退出
+- [x] classic launch 串行重试且只一次性退出（静态验证；真机回调顺序待验证）
 - [ ] 深链 URL 改为带目标和 TTL 的队列
 - [ ] 安装/下载/导出互斥并拥有各自 staging
-- [ ] 修复 `LC_HOME_PATH` 继承污染
+- [x] 修复 `LC_HOME_PATH` 继承污染（静态验证；LiveProcess 真机待验证）
 
 ### Phase 4：模块注入架构
 

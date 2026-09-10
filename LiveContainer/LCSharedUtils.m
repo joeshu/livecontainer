@@ -136,7 +136,7 @@ static BOOL LCIsSafePathComponent(NSString *value) {
 }
 
 + (BOOL)launchToGuestAppWithClassicMode:(NSUInteger)classicMode {
-    void (^completionHandler)(BOOL) = ^(BOOL success) {
+    void (^terminateAfterSuccessfulLaunch)(void) = ^{
         // syscall(SYS_ptrace, PT_DENY_ATTACH, 0, 0, 0);
         __asm__ __volatile__ (
                               "mov x0, #31\n"
@@ -156,12 +156,17 @@ static BOOL LCIsSafePathComponent(NSString *value) {
         if(urlScheme) {
             NSURL *launchURL = [NSURL URLWithString:[NSString stringWithFormat:urlScheme, NSBundle.mainBundle.bundleIdentifier]];
             UIApplication *application = [NSClassFromString(@"UIApplication") sharedApplication];
-            [application openURL:launchURL options:@{} completionHandler:completionHandler];
+            [application openURL:launchURL options:@{} completionHandler:^(BOOL success) {
+                if (success) {
+                    terminateAfterSuccessfulLaunch();
+                } else {
+                    NSLog(@"[LiveContainer] failed to request JIT enablement");
+                }
+            }];
             return YES;
         }
     }
 
-    int tries = 2;
     _LSOpenConfiguration *configuration = [[PrivClass(_LSOpenConfiguration) alloc] init];
     if(classicMode) {
         NSMutableDictionary* dict = [NSMutableDictionary new];
@@ -169,15 +174,31 @@ static BOOL LCIsSafePathComponent(NSString *value) {
         configuration.frontBoardOptions = dict;
     }
     LSApplicationWorkspace* workspace = [PrivClass(LSApplicationWorkspace) defaultWorkspace];
-    
-    for (int i = 0; i < tries; i++) {
-        [workspace openApplicationWithBundleIdentifier:NSUserDefaults.lcMainBundle.bundleIdentifier
-                                         configuration:configuration
-                                     completionHandler:^(BOOL success, NSError* error) {
-            NSLog(@"success=%d error=%@", success, error);
-            completionHandler(success);
-        }];
+    NSString *mainBundleIdentifier = NSUserDefaults.lcMainBundle.bundleIdentifier;
+    if (mainBundleIdentifier.length == 0) {
+        return NO;
     }
+
+    // LaunchServices is asynchronous. Retry only after the first request has
+    // failed; submitting both requests concurrently creates duplicate launches
+    // and makes the first failure kill the current process.
+    [workspace openApplicationWithBundleIdentifier:mainBundleIdentifier
+                                     configuration:configuration
+                                 completionHandler:^(BOOL success, NSError *error) {
+        NSLog(@"[LiveContainer] launch attempt 1 success=%d error=%@", success, error);
+        if (success) {
+            terminateAfterSuccessfulLaunch();
+            return;
+        }
+        [workspace openApplicationWithBundleIdentifier:mainBundleIdentifier
+                                         configuration:configuration
+                                     completionHandler:^(BOOL retrySuccess, NSError *retryError) {
+            NSLog(@"[LiveContainer] launch attempt 2 success=%d error=%@", retrySuccess, retryError);
+            if (retrySuccess) {
+                terminateAfterSuccessfulLaunch();
+            }
+        }];
+    }];
     return YES;
 }
 
