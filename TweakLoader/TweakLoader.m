@@ -36,8 +36,8 @@ static BOOL LCPathIsUnderRoot(NSURL *candidateURL, NSURL *rootURL) {
 }
 
 static BOOL LCPathHasSymlinkComponent(NSURL *candidateURL, NSURL *rootURL) {
-    NSString *root = [rootURL URLByResolvingSymlinksInPath].standardizedFileURL.path;
-    NSString *path = candidateURL.standardizedFileURL.path;
+    NSString *root = [rootURL URLByResolvingSymlinksInPath].standardizedURL.path;
+    NSString *path = candidateURL.standardizedURL.path;
     if (root.length == 0 || path.length == 0 ||
         !([path isEqualToString:root] || [path hasPrefix:[root stringByAppendingString:@"/"]])) {
         return YES;
