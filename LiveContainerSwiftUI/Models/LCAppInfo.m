@@ -7,6 +7,9 @@
 #import "LCUtils.h"
 #import "../../LiveContainer/LCSharedUtils.h"
 
+#include <errno.h>
+#include <stdio.h>
+
 
 @implementation LCAppInfo
 
@@ -342,15 +345,12 @@
             return;
         }
 
-        NSURL *executableURL = [NSURL fileURLWithPath:execPath];
-        NSURL *backupURL = [NSURL fileURLWithPath:backupPath];
-        if (![fm replaceItemAtURL:executableURL
-                     withItemAtURL:backupURL
-                    backupItemName:nil
-                           options:0
-                             error:&err]) {
+        // Both paths are in the same directory. POSIX rename replaces the
+        // destination atomically without deleting it first.
+        if (rename(backupPath.fileSystemRepresentation, execPath.fileSystemRepresentation) != 0) {
+            int errorCode = errno;
             [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SigningInProgress"];
-            completetionHandler(NO, [NSString stringWithFormat:@"Failed to replace executable safely: %@", err.localizedDescription]);
+            completetionHandler(NO, [NSString stringWithFormat:@"Failed to replace executable safely: %s (%d)", strerror(errorCode), errorCode]);
             return;
         }
     }
