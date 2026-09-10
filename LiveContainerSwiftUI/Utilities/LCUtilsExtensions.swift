@@ -342,9 +342,19 @@ extension LCUtils {
                 }
                 
                 let launchURL = URL(string: "\(freeScheme)://open-url?url=\(encodedStr)")!
+                guard let bundleName = appToLaunch.appInfo.relativeBundlePath else {
+                    onServerMessage?("Failed to resolve guest bundle path.")
+                    return false
+                }
+                let pending: [String: Any] = [
+                    "targetScheme": freeScheme,
+                    "bundleName": bundleName,
+                    "createdAt": Date(),
+                    "requestID": UUID().uuidString
+                ]
+                LCUtils.appGroupUserDefault.set(pending, forKey: "LCLaunchExtensionPending")
                 LCUtils.appGroupUserDefault.set(freeScheme, forKey: "LCLaunchExtensionScheme")
-                LCUtils.appGroupUserDefault.set(appToLaunch.appInfo.relativeBundlePath, forKey: "LCLaunchExtensionBundleID")
-                LCUtils.appGroupUserDefault.set(Date.now, forKey: "LCLaunchExtensionLaunchDate")
+                LCUtils.appGroupUserDefault.synchronize()
                 onServerMessage?("JIT acquisition will continue in another LiveContainer.")
                 
                 await UIApplication.shared.open(launchURL)
@@ -403,9 +413,19 @@ extension LCUtils {
                 }
                 
                 launchURL = URL(string: "\(freeScheme)://open-url?url=\(encodedStr)")!
+                guard let bundleName = appToLaunch.appInfo.relativeBundlePath else {
+                    onServerMessage?("Failed to resolve guest bundle path.")
+                    return false
+                }
+                let pending: [String: Any] = [
+                    "targetScheme": freeScheme,
+                    "bundleName": bundleName,
+                    "createdAt": Date(),
+                    "requestID": UUID().uuidString
+                ]
+                LCUtils.appGroupUserDefault.set(pending, forKey: "LCLaunchExtensionPending")
                 LCUtils.appGroupUserDefault.set(freeScheme, forKey: "LCLaunchExtensionScheme")
-                LCUtils.appGroupUserDefault.set(appToLaunch.appInfo.relativeBundlePath, forKey: "LCLaunchExtensionBundleID")
-                LCUtils.appGroupUserDefault.set(Date.now, forKey: "LCLaunchExtensionLaunchDate")
+                LCUtils.appGroupUserDefault.synchronize()
                 onServerMessage?("JIT acquisition will continue in another LiveContainer.")
                 
             } else {

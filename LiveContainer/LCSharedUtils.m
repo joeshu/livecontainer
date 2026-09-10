@@ -25,6 +25,33 @@ static BOOL LCIsSafePathComponent(NSString *value) {
     return YES;
 }
 
+static BOOL LCAppInfoContainsContainer(NSDictionary *appInfo, NSString *folderName) {
+    if (![appInfo isKindOfClass:NSDictionary.class] || !LCIsSafePathComponent(folderName)) {
+        return NO;
+    }
+    NSArray *containers = appInfo[@"LCContainers"];
+    if ([containers isKindOfClass:NSArray.class]) {
+        for (id item in containers) {
+            if ([item isKindOfClass:NSDictionary.class] &&
+                [item[@"folderName"] isKindOfClass:NSString.class] &&
+                [item[@"folderName"] isEqualToString:folderName]) {
+                return YES;
+            }
+        }
+        return NO;
+    }
+    // Legacy AppInfo stores one container in LCDataUUID.
+    return [appInfo[@"LCDataUUID"] isKindOfClass:NSString.class] &&
+           [appInfo[@"LCDataUUID"] isEqualToString:folderName];
+}
+
+static void LCClearPendingLaunchKeys(NSUserDefaults *defaults) {
+    for (NSString *key in @[@"LCPendingLaunch", @"selected", @"selectedContainer", @"launchAppUrlScheme",
+                            @"selectedLaunchRequestID", @"selectedLaunchDate"]) {
+        [defaults removeObjectForKey:key];
+    }
+}
+
 + (NSString*) teamIdentifier {
     static NSString* ans = nil;
     static dispatch_once_t onceToken;
@@ -228,21 +255,35 @@ static BOOL LCIsSafePathComponent(NSString *value) {
         }
         NSDictionary *appInfo = [NSDictionary dictionaryWithContentsOfFile:
             [appBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]];
-        if (![appInfo isKindOfClass:NSDictionary.class]) {
+        if (![appInfo isKindOfClass:NSDictionary.class] ||
+            (containerFolderName != nil && !LCAppInfoContainsContainer(appInfo, containerFolderName))) {
             return NO;
         }
 
-        // Commit the pending launch only after the registered bundle and its
-        // metadata have been validated.
-        if (openUrl) {
-            [lcUserDefaults setObject:openUrl forKey:@"launchAppUrlScheme"];
+        // Replace the complete pending request with one plist dictionary. This
+        // is the commit unit consumed by bootstrap; legacy keys are cleared.
+        NSMutableDictionary *pending = [@{
+            @"bundleName": launchBundleId,
+            @"createdAt": [NSDate date],
+            @"requestID": [NSUUID UUID].UUIDString
+        } mutableCopy];
+        if (containerFolderName) {
+            pending[@"containerFolderName"] = containerFolderName;
         }
-        [lcUserDefaults setObject:launchBundleId forKey:@"selected"];
-        [lcUserDefaults setObject:containerFolderName forKey:@"selectedContainer"];
+        if (openUrl) {
+            pending[@"openURL"] = openUrl;
+        }
+        LCClearPendingLaunchKeys(lcUserDefaults);
+        [lcUserDefaults setObject:pending forKey:@"LCPendingLaunch"];
+        [lcUserDefaults synchronize];
         NSUInteger classicMode = [appInfo[@"classicMode"] boolValue]
             ? [appInfo[@"LCClassicModeCache"][@"defaultClassicMode"] unsignedIntegerValue]
             : 0;
-        return [self launchToGuestAppWithClassicMode:classicMode];
+        BOOL requested = [self launchToGuestAppWithClassicMode:classicMode];
+        if (!requested) {
+            LCClearPendingLaunchKeys(lcUserDefaults);
+        }
+        return requested;
     }
     
     return NO;

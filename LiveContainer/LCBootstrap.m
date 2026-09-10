@@ -34,6 +34,99 @@ bool isSharedBundle = false;
 bool isSideStore = false;
 bool sideStoreExist = false;
 
+static BOOL LCIsSafeBootstrapComponent(NSString *value) {
+    if (![value isKindOfClass:NSString.class] || value.length == 0 || value.length > 255) {
+        return NO;
+    }
+    if ([value isEqualToString:@"."] || [value isEqualToString:@".."] ||
+        [value containsString:@"/"] || [value containsString:@"\\"] ||
+        [value rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location != NSNotFound) {
+        return NO;
+    }
+    return YES;
+}
+
+static BOOL LCAppInfoContainsBootstrapContainer(NSDictionary *appInfo, NSString *folderName) {
+    if (![appInfo isKindOfClass:NSDictionary.class] || !LCIsSafeBootstrapComponent(folderName)) {
+        return NO;
+    }
+    NSArray *containers = appInfo[@"LCContainers"];
+    if (![containers isKindOfClass:NSArray.class]) {
+        NSString *legacyUUID = appInfo[@"LCDataUUID"];
+        return [legacyUUID isKindOfClass:NSString.class] && [legacyUUID isEqualToString:folderName];
+    }
+    for (id item in containers) {
+        if ([item isKindOfClass:NSDictionary.class] &&
+            [item[@"folderName"] isKindOfClass:NSString.class] &&
+            [item[@"folderName"] isEqualToString:folderName]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+static void LCClearBootstrapPending(NSUserDefaults *defaults) {
+    for (NSString *key in @[@"LCPendingLaunch", @"selected", @"selectedContainer", @"launchAppUrlScheme",
+                            @"selectedLaunchRequestID", @"selectedLaunchDate"]) {
+        [defaults removeObjectForKey:key];
+    }
+}
+
+static BOOL LCIsFreshBootstrapDate(id rawDate) {
+    if (![rawDate isKindOfClass:NSDate.class]) {
+        return NO;
+    }
+    NSTimeInterval age = -[(NSDate *)rawDate timeIntervalSinceNow];
+    return age >= 0.0 && age <= 300.0;
+}
+
+static BOOL LCIsValidBootstrapRequestID(id rawID) {
+    return [rawID isKindOfClass:NSString.class] && [(NSString *)rawID length] > 0 &&
+           [(NSString *)rawID length] <= 128;
+}
+
+static BOOL LCIsOptionalBootstrapString(id rawValue) {
+    return rawValue == nil || [rawValue isKindOfClass:NSString.class];
+}
+
+static void LCClearLaunchExtensionPending(NSUserDefaults *defaults) {
+    for (NSString *key in @[@"LCLaunchExtensionPending", @"LCLaunchExtensionScheme", @"LCLaunchExtensionBundleID",
+                            @"LCLaunchExtensionContainerName", @"LCLaunchExtensionLaunchURL",
+                            @"LCLaunchExtensionLaunchDate", @"LCLaunchExtensionRequestID"]) {
+        [defaults removeObjectForKey:key];
+    }
+}
+
+static BOOL LCValidateBootstrapLaunchTarget(NSString *bundleName, NSString *containerName) {
+    if (![bundleName isKindOfClass:NSString.class] ||
+        (containerName != nil && ![containerName isKindOfClass:NSString.class])) {
+        return NO;
+    }
+    if (![bundleName isEqualToString:@"builtinSideStore"] &&
+        !LCIsSafeBootstrapComponent(bundleName)) {
+        return NO;
+    }
+    if (containerName != nil && !LCIsSafeBootstrapComponent(containerName)) {
+        return NO;
+    }
+    if ([bundleName isEqualToString:@"builtinSideStore"]) {
+        return containerName == nil;
+    }
+
+    bool isSharedApp = false;
+    NSBundle *appBundle = [LCSharedUtils findBundleWithBundleId:bundleName
+                                                   isSharedAppOut:&isSharedApp];
+    if (!appBundle) {
+        return NO;
+    }
+    NSDictionary *appInfo = [NSDictionary dictionaryWithContentsOfFile:
+        [appBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]];
+    if (![appInfo isKindOfClass:NSDictionary.class]) {
+        return NO;
+    }
+    return containerName == nil || LCAppInfoContainsBootstrapContainer(appInfo, containerName);
+}
+
 @implementation NSUserDefaults(LiveContainer)
 + (instancetype)lcUserDefaults {
     return lcUserDefaults;
@@ -331,8 +424,9 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
         dataUUID = guestAppInfo[@"LCDataUUID"];
     }
 
-    if(dataUUID == nil) {
-        return @"Container not found!";
+    if(![dataUUID isKindOfClass:NSString.class] ||
+       !LCAppInfoContainsBootstrapContainer(guestAppInfo, dataUUID)) {
+        return @"Container is not registered for this app!";
     }
     
     if(isLiveProcess && !isSideStore) {
@@ -678,31 +772,90 @@ int LiveContainerMain(int argc, char *argv[]) {
     // is reused. The current process HOME is the source of truth for bootstrap.
     setenv("LC_HOME_PATH", currentHome, 1);
 
-    NSString *selectedApp = [lcUserDefaults stringForKey:@"selected"];
-    NSString *selectedContainer = [lcUserDefaults stringForKey:@"selectedContainer"];
+    NSString *selectedApp = nil;
+    NSString *selectedContainer = nil;
     NSString *launchUrl = nil;
-    do {
-        if(selectedApp) {
-            launchUrl = [lcUserDefaults stringForKey:@"launchAppUrlScheme"];
-            break;
+
+    // Consume the ordinary request as one short-lived plist dictionary. The
+    // legacy keys below are migration-only and are cleared with the record.
+    NSDictionary *pending = [lcUserDefaults dictionaryForKey:@"LCPendingLaunch"];
+    if ([pending isKindOfClass:NSDictionary.class]) {
+        NSString *candidateApp = pending[@"bundleName"];
+        NSString *candidateContainer = pending[@"containerFolderName"];
+        NSString *candidateURL = pending[@"openURL"];
+        NSString *requestID = pending[@"requestID"];
+        NSDate *requestDate = pending[@"createdAt"];
+        BOOL valid = LCIsValidBootstrapRequestID(requestID) && LCIsFreshBootstrapDate(requestDate) &&
+                     LCIsOptionalBootstrapString(candidateURL) &&
+                     LCValidateBootstrapLaunchTarget(candidateApp, candidateContainer);
+        LCClearBootstrapPending(lcUserDefaults);
+        if (valid) {
+            selectedApp = candidateApp;
+            selectedContainer = candidateContainer;
+            launchUrl = candidateURL;
         }
-        // check launch task in shared defaults
-        NSString* scheemFromLaunchExtension = [lcSharedDefaults stringForKey:@"LCLaunchExtensionScheme"];
-        if(![scheemFromLaunchExtension isEqualToString:lcAppUrlScheme]) break;
-        NSString* selectedAppFromLaunchExtension = [lcSharedDefaults stringForKey:@"LCLaunchExtensionBundleID"];
-        if(!selectedAppFromLaunchExtension) break;
-        NSDate* launchDate = [lcSharedDefaults objectForKey:@"LCLaunchExtensionLaunchDate"];
-        NSTimeInterval secondsSinceDate = [launchDate timeIntervalSinceNow];
-        if (secondsSinceDate >= 0 || secondsSinceDate < -3.0) break;
-        
-        selectedApp = selectedAppFromLaunchExtension;
-        selectedContainer = [lcSharedDefaults stringForKey:@"LCLaunchExtensionContainerName"];
-        launchUrl = [lcSharedDefaults stringForKey:@"LCLaunchExtensionLaunchURL"];
-        
-        [lcSharedDefaults removeObjectForKey:@"LCLaunchExtensionBundleID"];
-        if (selectedContainer) [lcSharedDefaults removeObjectForKey:@"LCLaunchExtensionContainerName"];
-        if (launchUrl) [lcSharedDefaults removeObjectForKey:@"LCLaunchExtensionLaunchURL"];
-    } while (0);
+    } else {
+        // Old builds used separate keys. Accept them only while fresh and then
+        // consume all of them so stale state cannot survive this bootstrap.
+        NSString *candidateApp = [lcUserDefaults stringForKey:@"selected"];
+        NSString *candidateContainer = [lcUserDefaults stringForKey:@"selectedContainer"];
+        NSString *requestID = [lcUserDefaults stringForKey:@"selectedLaunchRequestID"];
+        NSDate *requestDate = [lcUserDefaults objectForKey:@"selectedLaunchDate"];
+        NSString *candidateURL = [lcUserDefaults stringForKey:@"launchAppUrlScheme"];
+        if (candidateApp || candidateContainer || requestID || requestDate || candidateURL) {
+            BOOL valid = requestID.length > 0 && LCIsFreshBootstrapDate(requestDate) &&
+                         LCValidateBootstrapLaunchTarget(candidateApp, candidateContainer);
+            LCClearBootstrapPending(lcUserDefaults);
+            if (valid) {
+                selectedApp = candidateApp;
+                selectedContainer = candidateContainer;
+                launchUrl = candidateURL;
+            }
+        }
+    }
+
+    // Consume one extension request as an atomic dictionary. The target scheme
+    // is part of the record, so a stale routing key cannot retarget the payload.
+    NSDictionary *extensionPending = [lcSharedDefaults dictionaryForKey:@"LCLaunchExtensionPending"];
+    id rawExtensionTargetScheme = extensionPending[@"targetScheme"];
+    NSString *extensionTargetScheme = [rawExtensionTargetScheme isKindOfClass:NSString.class]
+        ? rawExtensionTargetScheme : nil;
+    if (!selectedApp && [extensionPending isKindOfClass:NSDictionary.class] &&
+        [extensionTargetScheme isEqualToString:lcAppUrlScheme]) {
+        NSString *candidateApp = extensionPending[@"bundleName"];
+        NSString *candidateContainer = extensionPending[@"containerFolderName"];
+        NSString *candidateURL = extensionPending[@"openURL"];
+        NSString *requestID = extensionPending[@"requestID"];
+        NSDate *requestDate = extensionPending[@"createdAt"];
+        BOOL valid = LCIsValidBootstrapRequestID(requestID) && LCIsFreshBootstrapDate(requestDate) &&
+                     LCIsOptionalBootstrapString(candidateURL) &&
+                     LCValidateBootstrapLaunchTarget(candidateApp, candidateContainer);
+        LCClearLaunchExtensionPending(lcSharedDefaults);
+        if (valid) {
+            selectedApp = candidateApp;
+            selectedContainer = candidateContainer;
+            launchUrl = candidateURL;
+        }
+    } else if (!selectedApp && ![extensionPending isKindOfClass:NSDictionary.class] &&
+               [[lcSharedDefaults stringForKey:@"LCLaunchExtensionScheme"] isEqualToString:lcAppUrlScheme]) {
+        // Migration-only fallback for extension state written by old builds.
+        NSString *candidateApp = [lcSharedDefaults stringForKey:@"LCLaunchExtensionBundleID"];
+        NSString *candidateContainer = [lcSharedDefaults stringForKey:@"LCLaunchExtensionContainerName"];
+        NSString *candidateURL = [lcSharedDefaults stringForKey:@"LCLaunchExtensionLaunchURL"];
+        NSString *requestID = [lcSharedDefaults stringForKey:@"LCLaunchExtensionRequestID"];
+        NSDate *requestDate = [lcSharedDefaults objectForKey:@"LCLaunchExtensionLaunchDate"];
+        // Legacy extension records predate requestID, but their timestamp is
+        // still bounded by the same five-minute migration window.
+        BOOL valid = LCIsFreshBootstrapDate(requestDate) &&
+                     LCIsOptionalBootstrapString(candidateURL) &&
+                     LCValidateBootstrapLaunchTarget(candidateApp, candidateContainer);
+        LCClearLaunchExtensionPending(lcSharedDefaults);
+        if (valid) {
+            selectedApp = candidateApp;
+            selectedContainer = candidateContainer;
+            launchUrl = candidateURL;
+        }
+    }
     
     NSString* lastLaunchDataUUID;
     if(!isLiveProcess) {

@@ -100,9 +100,16 @@ struct LaunchAppExtension: AppIntent {
         }
         
         if normalizedLaunchScheme == "sidestore" {
+            let pending: [String: Any] = [
+                "targetScheme": "livecontainer",
+                "bundleName": "builtinSideStore",
+                "createdAt": Date(),
+                "requestID": UUID().uuidString
+            ]
+            lcSharedDefaults.set(pending, forKey: "LCLaunchExtensionPending")
+            // Commit/routing marker is written after the complete dictionary.
             lcSharedDefaults.set("livecontainer", forKey: "LCLaunchExtensionScheme")
-            lcSharedDefaults.set("builtinSideStore", forKey: "LCLaunchExtensionBundleID")
-            lcSharedDefaults.set(Date.now, forKey: "LCLaunchExtensionLaunchDate")
+            lcSharedDefaults.synchronize()
             try await openURL(launchOptions: ["url": launchURL])
             return .result()
         }
@@ -113,6 +120,7 @@ struct LaunchAppExtension: AppIntent {
 
         var bundleId: String? = nil
         var containerName: String? = nil
+        var openURLString: String? = nil
         var forceJIT: Bool = false
         guard var components = URLComponents(url: launchURL, resolvingAgainstBaseURL: false) else {
             throw LaunchAppExtensionError("URLComponents failed to initialize.")
@@ -123,6 +131,10 @@ struct LaunchAppExtension: AppIntent {
                 bundleId = bundleId1
             } else if queryItem.name == "container-folder-name", let containerName1 = queryItem.value {
                 containerName = containerName1
+            } else if queryItem.name == "open-url", let encoded = queryItem.value,
+                      let data = Data(base64Encoded: encoded),
+                      let decoded = String(data: data, encoding: .utf8) {
+                openURLString = decoded
             } else if queryItem.name == "jit", let forceJIT1 = queryItem.value {
                 if forceJIT1 == "true" {
                     forceJIT = true
@@ -178,12 +190,24 @@ struct LaunchAppExtension: AppIntent {
         let isLocked = appInfo["isLocked"] as? Bool ?? false
         let isJITNeeded = appInfo["isJITNeeded"] as? Bool ?? false
         
+        let registeredContainers = appInfo["LCContainers"] as? [[String: Any]]
+        let registeredNames = Set(registeredContainers?.compactMap { $0["folderName"] as? String } ?? [])
+        if let containerName {
+            guard !registeredNames.isEmpty && registeredNames.contains(containerName) else {
+                throw LaunchAppExtensionError("Container is not registered for this app!")
+            }
+        } else if let legacyDefault = appInfo["LCDataUUID"] as? String {
+            guard registeredContainers == nil || registeredNames.contains(legacyDefault) else {
+                throw LaunchAppExtensionError("Default container is not registered for this app!")
+            }
+            containerName = legacyDefault
+        } else if registeredNames.count == 1 {
+            containerName = registeredNames.first
+        } else {
+            throw LaunchAppExtensionError("Container not found!")
+        }
         
         var schemeToLaunch: String? = nil
-        // if containerName is not specified, use LCDataUUID as default
-        if containerName == nil {
-            containerName = appInfo["LCDataUUID"] as? String
-        }
         
         var newLaunch = false
         var allowClassicMode = false
@@ -212,10 +236,21 @@ struct LaunchAppExtension: AppIntent {
         }
         
         if newLaunch && !forceJIT && !isHiden && !isLocked && !isJITNeeded {
+            var pending: [String: Any] = [
+                "targetScheme": schemeToLaunch,
+                "bundleName": bundleId,
+                "createdAt": Date(),
+                "requestID": UUID().uuidString
+            ]
+            if let containerName {
+                pending["containerFolderName"] = containerName
+            }
+            if let openURLString {
+                pending["openURL"] = openURLString
+            }
+            lcSharedDefaults.set(pending, forKey: "LCLaunchExtensionPending")
             lcSharedDefaults.set(schemeToLaunch, forKey: "LCLaunchExtensionScheme")
-            lcSharedDefaults.set(bundleId, forKey: "LCLaunchExtensionBundleID")
-            lcSharedDefaults.set(containerName, forKey: "LCLaunchExtensionContainerName")
-            lcSharedDefaults.set(Date.now, forKey: "LCLaunchExtensionLaunchDate")
+            lcSharedDefaults.synchronize()
         }
 
         components.scheme = schemeToLaunch

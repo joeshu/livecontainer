@@ -563,12 +563,17 @@ final class ShareExtensionViewModel: ObservableObject {
     private func launchBuiltInSideStore(context: NSExtensionContext?) throws {
         let launchURLString = try preparePayloadForLaunch()
 
-        sharedDefaults?.set("livecontainer", forKey: "LCLaunchExtensionScheme")
-        sharedDefaults?.set("builtinSideStore", forKey: "LCLaunchExtensionBundleID")
+        var pending: [String: Any] = [
+            "targetScheme": "livecontainer",
+            "bundleName": "builtinSideStore",
+            "createdAt": Date(),
+            "requestID": UUID().uuidString
+        ]
         if let launchURLString {
-            sharedDefaults?.set(launchURLString, forKey: "LCLaunchExtensionLaunchURL")
+            pending["openURL"] = launchURLString
         }
-        sharedDefaults?.set(Date(), forKey: "LCLaunchExtensionLaunchDate")
+        sharedDefaults?.set(pending, forKey: "LCLaunchExtensionPending")
+        sharedDefaults?.synchronize()
 
         guard var components = URLComponents(string: "livecontainer://livecontainer-launch") else {
             throw ShareExtensionError("Unable to build SideStore launch URL.")
@@ -619,13 +624,18 @@ final class ShareExtensionViewModel: ObservableObject {
         }
 
         if newLaunch && !item.app.isHidden && !item.app.isLocked && !item.app.isJITNeeded {
-            sharedDefaults?.set(schemeToLaunch, forKey: "LCLaunchExtensionScheme")
-            sharedDefaults?.set(item.app.relativeBundlePath, forKey: "LCLaunchExtensionBundleID")
-            sharedDefaults?.set(item.container.folderName, forKey: "LCLaunchExtensionContainerName")
+            var pending: [String: Any] = [
+                "targetScheme": schemeToLaunch,
+                "bundleName": item.app.relativeBundlePath,
+                "containerFolderName": item.container.folderName,
+                "createdAt": Date(),
+                "requestID": UUID().uuidString
+            ]
             if let launchURLString {
-                sharedDefaults?.set(launchURLString, forKey: "LCLaunchExtensionLaunchURL")
+                pending["openURL"] = launchURLString
             }
-            sharedDefaults?.set(Date(), forKey: "LCLaunchExtensionLaunchDate")
+            sharedDefaults?.set(pending, forKey: "LCLaunchExtensionPending")
+            sharedDefaults?.synchronize()
         }
 
         var components = URLComponents()

@@ -522,6 +522,10 @@ final class LCDataCleanupService {
            snapshot.urlSchemes.contains(scheme) {
             defaults.removeObject(forKey: "launchAppUrlScheme")
         }
+        if let pending = defaults.dictionary(forKey: "LCPendingLaunch"),
+           pending["bundleName"] as? String == snapshot.relativeBundlePath {
+            defaults.removeObject(forKey: "LCPendingLaunch")
+        }
 
         if let sharedDefaults = UserDefaults.lcShared(),
            var guestSchemes = sharedDefaults.array(forKey: "LCGuestURLSchemes") as? [String] {
@@ -530,12 +534,18 @@ final class LCDataCleanupService {
         }
 
         let appGroupDefaults = LCUtils.appGroupUserDefault
+        if let pending = appGroupDefaults.dictionary(forKey: "LCLaunchExtensionPending"),
+           pending["bundleName"] as? String == snapshot.relativeBundlePath {
+            appGroupDefaults.removeObject(forKey: "LCLaunchExtensionPending")
+            appGroupDefaults.removeObject(forKey: "LCLaunchExtensionScheme")
+        }
         if appGroupDefaults.string(forKey: "LCLaunchExtensionBundleID") == snapshot.relativeBundlePath {
             [
                 "LCLaunchExtensionBundleID",
                 "LCLaunchExtensionContainerName",
                 "LCLaunchExtensionLaunchURL",
-                "LCLaunchExtensionLaunchDate"
+                "LCLaunchExtensionLaunchDate",
+                "LCLaunchExtensionRequestID"
             ].forEach { appGroupDefaults.removeObject(forKey: $0) }
         }
         if let bundleIdentifier = snapshot.appInfo.bundleIdentifier(),

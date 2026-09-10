@@ -36,9 +36,14 @@ class LCAppModel: ObservableObject, Hashable {
 
     private func clearPendingLaunchState() {
         let defaults = UserDefaults.standard
-        defaults.removeObject(forKey: "selected")
-        defaults.removeObject(forKey: "selectedContainer")
-        defaults.removeObject(forKey: "launchAppUrlScheme")
+        [
+            "LCPendingLaunch",
+            "selected",
+            "selectedContainer",
+            "launchAppUrlScheme",
+            "selectedLaunchRequestID",
+            "selectedLaunchDate"
+        ].forEach { defaults.removeObject(forKey: $0) }
     }
     
     @Published var uiIsJITNeeded : Bool {
@@ -316,13 +321,24 @@ class LCAppModel: ObservableObject, Hashable {
                     shouldBreak = true
                 }
                 if let freeScheme {
-                    LCUtils.appGroupUserDefault.set(freeScheme, forKey: "LCLaunchExtensionScheme")
-                    LCUtils.appGroupUserDefault.set(self.appInfo.relativeBundlePath, forKey: "LCLaunchExtensionBundleID")
-                    LCUtils.appGroupUserDefault.set(uiSelectedContainer?.folderName, forKey: "LCLaunchExtensionContainerName")
-                    if let urlStr {
-                        LCUtils.appGroupUserDefault.set(urlStr, forKey: "LCLaunchExtensionLaunchURL")
+                    guard let bundleName = self.appInfo.relativeBundlePath else {
+                        throw "Failed to resolve guest bundle path"
                     }
-                    LCUtils.appGroupUserDefault.set(Date.now, forKey: "LCLaunchExtensionLaunchDate")
+                    var pending: [String: Any] = [
+                        "targetScheme": freeScheme,
+                        "bundleName": bundleName,
+                        "createdAt": Date(),
+                        "requestID": UUID().uuidString
+                    ]
+                    if let folderName = uiSelectedContainer?.folderName {
+                        pending["containerFolderName"] = folderName
+                    }
+                    if let urlStr {
+                        pending["openURL"] = urlStr
+                    }
+                    LCUtils.appGroupUserDefault.set(pending, forKey: "LCLaunchExtensionPending")
+                    LCUtils.appGroupUserDefault.set(freeScheme, forKey: "LCLaunchExtensionScheme")
+                    LCUtils.appGroupUserDefault.synchronize()
                     var launchURLComp = URLComponents()
                     launchURLComp.scheme = freeScheme
                     launchURLComp.host = "livecontainer-launch"
@@ -361,15 +377,22 @@ class LCAppModel: ObservableObject, Hashable {
         try await signApp(force: false)
         
         launchStateOwned = true
-        if let bundleIdOverride {
-            UserDefaults.standard.set(bundleIdOverride, forKey: "selected")
-        } else {
-            UserDefaults.standard.set(self.appInfo.relativeBundlePath, forKey: "selected")
+        guard let bundleName = bundleIdOverride ?? self.appInfo.relativeBundlePath else {
+            throw "Failed to resolve guest bundle path"
+        }
+        var pendingLaunch: [String: Any] = [
+            "bundleName": bundleName,
+            "createdAt": Date(),
+            "requestID": UUID().uuidString
+        ]
+        if let folderName = uiSelectedContainer?.folderName {
+            pendingLaunch["containerFolderName"] = folderName
         }
         if let urlStr {
-            UserDefaults.standard.setValue(urlStr, forKey: "launchAppUrlScheme")
+            pendingLaunch["openURL"] = urlStr
         }
-        UserDefaults.standard.set(uiSelectedContainer?.folderName, forKey: "selectedContainer")
+        UserDefaults.standard.set(pendingLaunch, forKey: "LCPendingLaunch")
+        UserDefaults.standard.synchronize()
         
         var jitNeeded = appInfo.isJITNeeded || appInfo.is32bit
         if let forceJIT {

@@ -17,15 +17,15 @@
 
 - [x] 建立本地分支
 - [x] 建立实施清单
-- [x] 增加安全路径工具接口（原生深链首层校验；注册表/真实路径校验仍待完成）
+- [x] 增加安全路径工具接口（原生深链、注册表归属和 Bootstrap 目标校验）
 - [x] 增加不依赖 Xcode 的路径/归档静态契约检查
 - [x] 增加变更回滚说明和验收记录（本分支；未推送）
 - [x] 每个阶段使用独立 checkpoint（当前共 7 个加固提交；未推送）
 
 ### Phase 1：P0 路径边界
 
-- [ ] `bundle-name` 仅允许已注册 bundle，禁止 URL 直接成为路径（已完成首层组件校验；注册表匹配待完成）
-- [ ] `container-folder-name` 仅允许目标 App 已注册容器（已完成首层组件校验；归属匹配待完成）
+- [x] `bundle-name` 仅允许已注册 bundle，禁止 URL 直接成为路径（原生深链和 Bootstrap 均校验注册 Bundle）
+- [x] `container-folder-name` 仅允许目标 App 已注册容器（深链、Bootstrap 最终容器解析均校验 LCContainers）
 - [ ] App Group identifier 做安全组件与 entitlement 映射
 - [ ] 所有实际路径做 canonical containment
 - [ ] 外部 bookmark 失败禁止回退到内部同名容器
@@ -43,10 +43,10 @@
 
 ### Phase 3：启动与并发状态
 
-- [ ] `runApp` 使用 request ID + actor/串行状态机
-- [ ] JIT 失败/取消清理全部 pending launch 状态
+- [ ] `runApp` 使用 request ID + actor/串行状态机（本轮已先落地 request ID + 原子 pending 记录，actor 化待后续）
+- [x] JIT 失败/取消清理全部 pending launch 状态
 - [x] classic launch 串行重试且只一次性退出（静态验证；真机回调顺序待验证）
-- [ ] 深链 URL 改为带目标和 TTL 的队列
+- [x] 深链 URL 改为带目标和 TTL 的原子 pending 记录（队列化待后续）
 - [ ] 安装/下载/导出互斥并拥有各自 staging
 - [x] 修复 `LC_HOME_PATH` 继承污染（静态验证；LiveProcess 真机待验证）
 
@@ -77,7 +77,7 @@
 
 - 仓库基线：PASS
 - 分支隔离：PASS
-- P0 安全解压/安装事务/首层路径校验/启动重试：代码已落地，静态门禁 PASS
+- P0 安全解压/安装事务/注册表归属/原子启动协议/启动重试：代码已落地，静态门禁 PASS
 - P1 清理失败保护、自定义 payload 校验、TweakLoader 路径收紧：代码已落地，静态门禁 PASS
-- 注册表精确归属、外部容器完整启动协议、Manifest 注入、Xcode/iOS 真机：未完成/未验证
+- 外部容器 bookmark 完整启动协议、Manifest 注入、Xcode/iOS 真机：未完成/未验证
 - 远端推送：未执行

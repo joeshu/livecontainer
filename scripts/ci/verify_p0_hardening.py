@@ -28,6 +28,11 @@ def main() -> int:
     archive = read("LiveContainerSwiftUI/Utilities/unarchive.m")
     install = read("LiveContainerSwiftUI/Views/AppList/LCAppListView.swift")
     shared = read("LiveContainer/LCSharedUtils.m")
+    bootstrap = read("LiveContainer/LCBootstrap.m")
+    app_model = read("LiveContainerSwiftUI/Models/LCAppModel.swift")
+    launch_extension = read("LaunchAppExtension/LaunchAppExtension.swift")
+    share_extension = read("ShareExtension/ShareExtensionViewModel.swift")
+    cleanup = read("LiveContainerSwiftUI/Utilities/LCDataCleanupService.swift")
     tweak_loader = read("TweakLoader/TweakLoader.m")
 
     for flag in (
@@ -55,8 +60,29 @@ def main() -> int:
     require(install, "ownsInput: Bool = false", "source ownership flag")
     forbid(install, "try FileManager.default.removeItem(at: fileUrl)", "unconditional source deletion")
     require(shared, "LCIsSafePathComponent", "native deep-link component guard")
+    require(shared, "LCAppInfoContainsContainer", "native container ownership guard")
+    require(shared, "LCPendingLaunch", "atomic native pending launch")
     require(shared, "appBundle == nil", "bundle lookup failure guard")
     require(shared, "LCAppInfo.plist", "bundle metadata validation")
+    for source, label in (
+        (bootstrap, "bootstrap"),
+        (app_model, "app model"),
+        (launch_extension, "launch extension"),
+        (share_extension, "share extension"),
+    ):
+        require(source, "requestID", f"{label} request ID")
+        require(source, "createdAt", f"{label} request timestamp")
+        if label != "app model":
+            require(source, "targetScheme", f"{label} target scheme")
+    require(bootstrap, "LCIsFreshBootstrapDate", "bootstrap TTL validation")
+    require(bootstrap, "LCClearBootstrapPending", "ordinary pending consumption")
+    require(bootstrap, "LCClearLaunchExtensionPending", "extension pending consumption")
+    require(bootstrap, "LCValidateBootstrapLaunchTarget", "bootstrap target validation")
+    require(app_model, '"LCPendingLaunch"', "ordinary atomic pending write")
+    require(launch_extension, '"LCLaunchExtensionPending"', "extension atomic pending write")
+    require(share_extension, '"LCLaunchExtensionPending"', "share atomic pending write")
+    require(cleanup, '"LCPendingLaunch"', "ordinary pending cleanup")
+    require(cleanup, '"LCLaunchExtensionPending"', "extension pending cleanup")
     payload = read("LiveProcess/main.m")
     for guard in ("realpath", "S_ISREG", "RTLD_LOCAL", "dlclose(handle)", "custom payload entry not found"):
         require(payload, guard, f"custom payload guard {guard}")
