@@ -119,12 +119,12 @@ int extract(NSString *fileToExtract, NSString *extractionPath, NSProgress *progr
 
     NSFileManager *fileManager = NSFileManager.defaultManager;
     BOOL isDirectory = NO;
-    if (![fileManager fileExistsAtPath:fileToExtract.path isDirectory:&isDirectory] || isDirectory) {
+    if (![fileManager fileExistsAtPath:fileToExtract isDirectory:&isDirectory] || isDirectory) {
         return ARCHIVE_FATAL;
     }
-    if (![fileManager fileExistsAtPath:extractionPath.path isDirectory:&isDirectory]) {
+    if (![fileManager fileExistsAtPath:extractionPath isDirectory:&isDirectory]) {
         NSError *error = nil;
-        if (![fileManager createDirectoryAtPath:extractionPath.path
+        if (![fileManager createDirectoryAtPath:extractionPath
                     withIntermediateDirectories:YES attributes:nil error:&error]) {
             return ARCHIVE_FATAL;
         }
