@@ -179,9 +179,9 @@ def main() -> None:
         macho_body,
         [
             "if (fd < 0)",
-            '"Failed to open %s"',
+            '@"Failed to open %s"',
             "if (fstat(fd, &fileStat) != 0)",
-            '"Failed to stat %s"',
+            '@"Failed to stat %s"',
             "fileStat.st_size <= 0",
             "if (map == MAP_FAILED)",
             "munmap(map",
