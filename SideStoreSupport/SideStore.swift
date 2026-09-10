@@ -155,7 +155,17 @@ class RefreshHandler: NSObject, RefreshServer {
             }
 
             let sideStoreHomeURL = URL(fileURLWithPath: lcHome)
-                .appendingPathComponent("Documents/SideStore")
+                .appendingPathComponent("Documents/SideStore", isDirectory: true)
+            do {
+                try FileManager.default.createDirectory(
+                    at: sideStoreHomeURL,
+                    withIntermediateDirectories: true
+                )
+            } catch {
+                throw NSError(domain: "SideStore", code: 5, userInfo: [
+                    NSLocalizedDescriptionKey: "Unable to prepare the SideStore container: \(error.localizedDescription)"
+                ])
+            }
             guard let bookmarkData = bookmarkForURL(sideStoreHomeURL) else {
                 throw NSError(domain: "SideStore", code: 5, userInfo: [
                     NSLocalizedDescriptionKey: "Unable to create a security-scoped bookmark for SideStore."

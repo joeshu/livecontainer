@@ -252,14 +252,15 @@ class LCAppModel: ObservableObject, Hashable {
             }
         }
         
-        if uiContainers.isEmpty {
+        let isBuiltInSideStore = appInfo is BuiltInSideStoreAppInfo || bundleIdOverride == "builtinSideStore"
+        if !isBuiltInSideStore && uiContainers.isEmpty {
             let newName = NSUUID().uuidString
             let newContainer = LCContainer(folderName: newName, name: newName, isShared: uiIsShared)
             uiContainers.append(newContainer)
             if uiSelectedContainer == nil {
-                uiSelectedContainer = newContainer;
+                uiSelectedContainer = newContainer
             }
-            appInfo.containers = uiContainers;
+            appInfo.containers = uiContainers
             guard let appIdentifier = appInfo.bundleIdentifier() else {
                 throw "lc.appList.infoPlistCannotReadError".loc
             }
@@ -273,15 +274,18 @@ class LCAppModel: ObservableObject, Hashable {
             }
             uiSelectedContainer = selected
         }
-        guard let selectedContainer = uiSelectedContainer else {
-            throw "lc.container.notFound".loc
+        let selectedContainer = uiSelectedContainer
+        if !isBuiltInSideStore {
+            guard let selectedContainer else {
+                throw "lc.container.notFound".loc
+            }
+            // External containers are authoritative only when the bookmark target
+            // still belongs to this app. Renew stale bookmarks before constructing
+            // any launch request, and fail closed if persistence fails.
+            try selectedContainer.validateExternalOwnership(appInfo: appInfo)
+            try selectedContainer.renewStaleBookmarkIfNeeded(appInfo: appInfo)
         }
-        // External containers are authoritative only when the bookmark target
-        // still belongs to this app. Renew stale bookmarks before constructing
-        // any launch request, and fail closed if persistence fails.
-        try selectedContainer.validateExternalOwnership(appInfo: appInfo)
-        try selectedContainer.renewStaleBookmarkIfNeeded(appInfo: appInfo)
-        let currentDataFolder = containerFolderName ?? selectedContainer.folderName
+        let currentDataFolder = isBuiltInSideStore ? nil : (containerFolderName ?? selectedContainer?.folderName)
         
         let classicMode = appInfo.defaultClassicMode
         let multitask = classicMode == 0 ? (multitask ?? shouldLaunchInMultitaskMode) : false

@@ -424,8 +424,8 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
         dataUUID = guestAppInfo[@"LCDataUUID"];
     }
 
-    if(![dataUUID isKindOfClass:NSString.class] ||
-       !LCAppInfoContainsBootstrapContainer(guestAppInfo, dataUUID)) {
+    if(!isSideStore && (![dataUUID isKindOfClass:NSString.class] ||
+       !LCAppInfoContainsBootstrapContainer(guestAppInfo, dataUUID))) {
         return @"Container is not registered for this app!";
     }
     
@@ -517,8 +517,13 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
     
     if(isSideStore) {
         if(isLiveProcess) {
-            newHomePath = [lcUserDefaults stringForKey:@"specifiedSideStoreContainerPath"];;
+            newHomePath = [lcUserDefaults stringForKey:@"specifiedSideStoreContainerPath"];
             [lcUserDefaults removeObjectForKey:@"specifiedSideStoreContainerPath"];
+            BOOL isDirectory = NO;
+            if (![newHomePath isKindOfClass:NSString.class] || newHomePath.length == 0 ||
+                ![fm fileExistsAtPath:newHomePath isDirectory:&isDirectory] || !isDirectory) {
+                return @"SideStore container bookmark resolved to an unavailable directory.";
+            }
         } else {
             newHomePath = [docPath stringByAppendingPathComponent:@"SideStore"];
         }

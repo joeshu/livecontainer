@@ -37,5 +37,15 @@ NSXPCListener* startAnonymousListener(NSObject<RefreshServer>* reporter) {
 }
 
 NSData* bookmarkForURL(NSURL* url) {
-    return [url bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0];
+    if (![url isKindOfClass:NSURL.class] || !url.isFileURL || url.path.length == 0) {
+        return nil;
+    }
+    BOOL isDirectory = NO;
+    if (![NSFileManager.defaultManager fileExistsAtPath:url.path isDirectory:&isDirectory] || !isDirectory) {
+        return nil;
+    }
+    return [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+              includingResourceValuesForKeys:nil
+                               relativeToURL:nil
+                                       error:nil];
 }

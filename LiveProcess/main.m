@@ -140,11 +140,24 @@ int LiveProcessMain(int argc, char *argv[]) {
     BOOL access = accessibleBookmarkedUrls.count > 0;
     
     if ([appInfo[@"selected"] isEqualToString:@"builtinSideStore"]) {
-        if(access) {
-            [lcUserDefaults setObject:accessibleBookmarkedUrls.firstObject.path
-                               forKey:@"specifiedSideStoreContainerPath"];
+        if (accessibleBookmarkedUrls.count != 1) {
+            NSLog(@"[LiveProcess] SideStore requires exactly one accessible container bookmark");
+            return 1;
         }
+        NSURL *sideStoreURL = accessibleBookmarkedUrls.firstObject;
+        BOOL isDirectory = NO;
+        if (!sideStoreURL.isFileURL ||
+            ![NSFileManager.defaultManager fileExistsAtPath:sideStoreURL.path isDirectory:&isDirectory] ||
+            !isDirectory) {
+            NSLog(@"[LiveProcess] SideStore bookmark is not an accessible directory: %@", sideStoreURL.path);
+            return 1;
+        }
+        [lcUserDefaults setObject:sideStoreURL.path forKey:@"specifiedSideStoreContainerPath"];
         NSXPCListenerEndpoint* endpoint = appInfo[@"endpoint"];
+        if (![endpoint isKindOfClass:NSXPCListenerEndpoint.class]) {
+            NSLog(@"[LiveProcess] SideStore refresh endpoint is missing");
+            return 1;
+        }
 
         NSXPCConnection* connection = [[NSXPCConnection alloc] initWithListenerEndpoint:endpoint];
         connection.remoteObjectInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
