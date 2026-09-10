@@ -56,7 +56,7 @@ static BOOL LCAppendSecurityScopedBookmark(NSMutableArray *bookmarks, NSURL *url
         return NO;
     }
     NSError *bookmarkError = nil;
-    NSData *bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+    NSData *bookmark = [url bookmarkDataWithOptions:(1UL << 11)
                          includingResourceValuesForKeys:nil
                                           relativeToURL:nil
                                                   error:&bookmarkError];
@@ -196,7 +196,7 @@ static BOOL LCAppendSecurityScopedBookmark(NSMutableArray *bookmarks, NSURL *url
                             NSData *bookmarkForRequest = registeredBookmark;
                             if (stale) {
                                 NSError *renewError = nil;
-                                NSData *renewed = [resolved bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+                                NSData *renewed = [resolved bookmarkDataWithOptions:(1UL << 11)
                                              includingResourceValuesForKeys:nil relativeToURL:nil error:&renewError];
                                 if (renewed) {
                                     bookmarkForRequest = renewed;

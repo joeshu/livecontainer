@@ -115,7 +115,7 @@ int LiveProcessMain(int argc, char *argv[]) {
         BOOL isStale = NO;
         NSError *error = nil;
         NSURL *resolvedURL = [NSURL URLByResolvingBookmarkData:(NSData *)bookmark
-                                                         options:NSURLBookmarkResolutionWithSecurityScope
+                                                         options:(1UL << 10)
                                                    relativeToURL:nil
                                              bookmarkDataIsStale:&isStale
                                                            error:&error];

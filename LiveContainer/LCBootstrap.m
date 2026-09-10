@@ -500,7 +500,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
                     NSError* err = nil;
                     BOOL isStale = false;
                     bookmarkURL = [NSURL URLByResolvingBookmarkData:bookmarkData
-                                                              options:NSURLBookmarkResolutionWithSecurityScope
+                                                              options:(1UL << 10)
                                                         relativeToURL:nil
                                                   bookmarkDataIsStale:&isStale
                                                                 error:&err];

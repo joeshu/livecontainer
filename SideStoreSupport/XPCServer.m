@@ -44,7 +44,7 @@ NSData* bookmarkForURL(NSURL* url) {
     if (![NSFileManager.defaultManager fileExistsAtPath:url.path isDirectory:&isDirectory] || !isDirectory) {
         return nil;
     }
-    return [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+    return [url bookmarkDataWithOptions:(1UL << 11)
               includingResourceValuesForKeys:nil
                                relativeToURL:nil
                                        error:nil];
