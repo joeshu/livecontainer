@@ -180,7 +180,7 @@ static BOOL LCAppendSecurityScopedBookmark(NSMutableArray *bookmarks, NSURL *url
                         BOOL stale = NO;
                         NSError *resolveError = nil;
                         NSURL *resolved = [NSURL URLByResolvingBookmarkData:registeredBookmark
-                                                                      options:NSURLBookmarkResolutionWithSecurityScope
+                                                                      options:(1UL << 10)
                                                                 relativeToURL:nil
                                                           bookmarkDataIsStale:&stale
                                                                         error:&resolveError];

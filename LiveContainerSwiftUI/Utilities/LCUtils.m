@@ -576,7 +576,7 @@ static NSString *LCJSONStringForDiagnostics(NSDictionary *diagnostics) {
         return nil;
     }
     NSError *error = nil;
-    NSData *bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+    NSData *bookmark = [url bookmarkDataWithOptions:(1UL << 11)
                          includingResourceValuesForKeys:nil
                                           relativeToURL:nil
                                                   error:&error];
