@@ -401,7 +401,7 @@ static void resolveLaunchExtensionFileBookmark(void) {
     BOOL isStale = NO;
     NSError* error = nil;
     NSURL* resolvedURL = [NSURL URLByResolvingBookmarkData:bookmarkData
-                                                   options:NSURLBookmarkResolutionWithSecurityScope
+                                                   options:(1UL << 10)
                                              relativeToURL:nil
                                        bookmarkDataIsStale:&isStale
                                                      error:&error];

@@ -120,7 +120,7 @@ def main() -> int:
             if "resolvingBookmarkData" in source:
                 require(source, "withSecurityScope" if "withSecurityScope" in source else "rawValue: 1 << 10", f"{label} security scope option")
             else:
-                require(source, "NSURLBookmarkResolutionWithSecurityScope", f"{label} security scope option")
+                require(source, "NSURLBookmarkResolutionWithSecurityScope" if "NSURLBookmarkResolutionWithSecurityScope" in source else "(1UL << 10)", f"{label} security scope option")
     require(multitask_source, "LCAppendSecurityScopedBookmark", "multitask guarded bookmark creation")
     require(multitask_source, "LCIsSafeMultitaskPathComponent", "multitask path component guard")
     forbid(multitask_source, "[bookmarks addObject:bookmarkData]", "multitask nil bookmark insertion")
