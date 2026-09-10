@@ -69,7 +69,7 @@ final class LCDataCleanupService {
         report.removedItems.append("App bundle")
 
         if deleteData {
-            report.merge(cleanData(for: snapshot, removeContainerDefinitions: true, removeAppGroups: true))
+            report.merge(cleanData(for: snapshot, removeContainerDefinitions: true, removeAppGroups: true, excludingApp: app))
             removeUnusedTweakFolder(snapshot.tweakFolder, excluding: snapshot.app, report: &report)
         } else {
             report.preservedItems.append("Container data")
@@ -102,19 +102,21 @@ final class LCDataCleanupService {
         try ensureNotRunning(snapshot)
 
         var report = LCCleanupReport()
-        cleanContainer(container, keepInfoPlist: !removeDefinition, report: &report)
-        cleanContainerMetadata(container.folderName, report: &report)
+        let cleaned = cleanContainer(container, keepInfoPlist: !removeDefinition, report: &report)
+        if cleaned {
+            cleanContainerMetadata(container.folderName, report: &report)
+        }
 
         if removeDefinition {
             clearRuntimeState(for: snapshot)
         }
 
-        // A single-container reset can safely remove exclusive app groups. A
-        // multi-container app keeps shared groups to avoid cross-container data loss.
+        // A single-container reset must retain groups used by sibling containers
+        // of the same app. Only a whole-app cleanup excludes the removed app.
         if removeDefinition || app.uiContainers.count == 1 {
             removeUnusedAppGroups(
                 snapshot.groupIdentifiers,
-                excluding: removeDefinition ? app : nil,
+                excluding: app.uiContainers.count == 1 ? app : nil,
                 report: &report
             )
         } else {
@@ -295,20 +297,23 @@ final class LCDataCleanupService {
     private func cleanData(
         for snapshot: Snapshot,
         removeContainerDefinitions: Bool,
-        removeAppGroups: Bool
+        removeAppGroups: Bool,
+        excludingApp: LCAppModel? = nil
     ) -> LCCleanupReport {
         var report = LCCleanupReport()
         for container in snapshot.containers {
-            cleanContainer(
+            let cleaned = cleanContainer(
                 container,
                 keepInfoPlist: !removeContainerDefinitions,
                 report: &report
             )
-            cleanContainerMetadata(container.folderName, report: &report)
+            if cleaned {
+                cleanContainerMetadata(container.folderName, report: &report)
+            }
         }
 
         if removeAppGroups {
-            removeUnusedAppGroups(snapshot.groupIdentifiers, excluding: snapshot.app, report: &report)
+            removeUnusedAppGroups(snapshot.groupIdentifiers, excluding: excludingApp, report: &report)
         } else if !snapshot.groupIdentifiers.isEmpty {
             report.preservedItems.append("Shared App Group data")
         }
@@ -319,21 +324,25 @@ final class LCDataCleanupService {
         _ container: LCContainer,
         keepInfoPlist: Bool,
         report: inout LCCleanupReport
-    ) {
+    ) -> Bool {
         let url = container.containerURL.standardizedFileURL
         guard fileManager.fileExists(atPath: url.path) else {
-            return
+            return true
         }
 
         let isExternal = container.storageBookMark != nil
         if !isExternal && !isDescendant(url, of: LCPath.dataPath) && !isDescendant(url, of: LCPath.lcGroupDataPath) {
             report.failures.append(LCDataCleanupError.unsafePath(url).localizedDescription)
-            return
+            return false
         }
 
         var accessed = false
         if isExternal {
             accessed = url.startAccessingSecurityScopedResource()
+            guard accessed else {
+                report.failures.append("Unable to access external container: \(url.path)")
+                return false
+            }
         }
         defer {
             if accessed {
@@ -352,8 +361,10 @@ final class LCDataCleanupService {
                 try fileManager.removeItem(at: url)
                 report.removedItems.append(url.path)
             }
+            return true
         } catch {
             report.failures.append("\(url.path): \(error.localizedDescription)")
+            return false
         }
     }
 
