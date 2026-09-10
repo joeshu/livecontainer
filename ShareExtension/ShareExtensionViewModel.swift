@@ -683,8 +683,9 @@ final class ShareExtensionViewModel: ObservableObject {
     private static func resolveBookmarkURL(_ bookmarkData: Data) -> URL? {
         do {
             var isStale = false
+            let resolutionOptions = URL.BookmarkResolutionOptions(rawValue: 1 << 10)
             return try URL(resolvingBookmarkData: bookmarkData,
-                           options: [.withSecurityScope],
+                           options: resolutionOptions,
                            relativeTo: nil,
                            bookmarkDataIsStale: &isStale)
         } catch {
