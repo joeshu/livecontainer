@@ -347,7 +347,7 @@
         if (![fm replaceItemAtURL:executableURL
                      withItemAtURL:backupURL
                     backupItemName:nil
-                           options:NSFileManagerItemReplacementUsingNewMetadataOnly
+                           options:0
                              error:&err]) {
             [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SigningInProgress"];
             completetionHandler(NO, [NSString stringWithFormat:@"Failed to replace executable safely: %@", err.localizedDescription]);
