@@ -259,12 +259,20 @@ void LCOpenSideStoreURL(NSURL* sidestoreUrl) {
         if (sidestoreUrl.absoluteString.length > 0) {
             pending[@"openURL"] = sidestoreUrl.absoluteString;
         }
-        for (NSString *key in @[@"LCPendingLaunch", @"selected", @"selectedContainer",
-                                @"launchAppUrlScheme", @"selectedLaunchRequestID",
-                                @"selectedLaunchDate"]) {
-            [defaults removeObjectForKey:key];
+        // SideStore switching is a same-host relaunch path. Keep its legacy
+        // routing keys, now protected by the same request ID/TTL consumed by
+        // Bootstrap. Using LCPendingLaunch here makes some iOS/host versions
+        // terminate the current process without reopening the host scene.
+        [defaults removeObjectForKey:@"LCPendingLaunch"];
+        [defaults removeObjectForKey:@"selectedContainer"];
+        [defaults setObject:@"builtinSideStore" forKey:@"selected"];
+        [defaults setObject:pending[@"requestID"] forKey:@"selectedLaunchRequestID"];
+        [defaults setObject:pending[@"createdAt"] forKey:@"selectedLaunchDate"];
+        if (sidestoreUrl.absoluteString.length > 0) {
+            [defaults setObject:sidestoreUrl.absoluteString forKey:@"launchAppUrlScheme"];
+        } else {
+            [defaults removeObjectForKey:@"launchAppUrlScheme"];
         }
-        [defaults setObject:pending forKey:@"LCPendingLaunch"];
         [defaults synchronize];
         [NSClassFromString(@"LCSharedUtils") launchToGuestAppWithClassicMode:0];
     };
