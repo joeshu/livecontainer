@@ -206,14 +206,39 @@ static NSArray<NSString *> *LCApplicationGroupEntitlements(void) {
 
 + (BOOL)launchToGuestAppWithClassicMode:(NSUInteger)classicMode {
     void (^terminateAfterSuccessfulLaunch)(void) = ^{
-        // syscall(SYS_ptrace, PT_DENY_ATTACH, 0, 0, 0);
-        __asm__ __volatile__ (
-                              "mov x0, #31\n"
-                              "mov x16, #26\n"
-                              "svc #0x80"
-                              );
-        raise(SIGKILL);
+        // Let SpringBoard/FrontBoard finish activating the replacement scene.
+        // openURL's YES only means the request was accepted, not that the new
+        // process is already visible.
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)),
+                       dispatch_get_main_queue(), ^{
+            __asm__ __volatile__ (
+                                  "mov x0, #31\n"
+                                  "mov x16, #26\n"
+                                  "svc #0x80"
+                                  );
+            raise(SIGKILL);
+        });
     };
+
+    // LiveContainer and the embedded SideStore are the same host application.
+    // Re-opening the host through its control URL is the handoff path used by
+    // older working builds; opening our own bundle via LSApplicationWorkspace
+    // can report success and still leave the replacement scene unactivated.
+    if (classicMode == 0 && lcAppUrlScheme.length > 0) {
+        UIApplication *application = [NSClassFromString(@"UIApplication") sharedApplication];
+        NSURL *launchURL = [NSURL URLWithString:[NSString stringWithFormat:@"%@://livecontainer-relaunch", lcAppUrlScheme]];
+        if ([application canOpenURL:launchURL]) {
+            [application openURL:launchURL options:@{} completionHandler:^(BOOL success) {
+                NSLog(@"[LiveContainer] relaunch URL success=%d", success);
+                if (success) {
+                    terminateAfterSuccessfulLaunch();
+                }
+            }];
+            return YES;
+        }
+        NSLog(@"[LiveContainer] relaunch URL cannot be opened: %@", launchURL);
+        return NO;
+    }
     
     if (!self.certificatePassword) {
         NSString *urlScheme = nil;
