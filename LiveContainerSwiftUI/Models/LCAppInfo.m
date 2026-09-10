@@ -318,12 +318,41 @@
     int currentPatchRev = 7;
     bool needPatch = [info[@"LCPatchRevision"] intValue] < currentPatchRev;
     if (needPatch || forceSign) {
-        // copy-delete-move to avoid EXC_BAD_ACCESS (SIGKILL - CODESIGNING)
+        // Replace the executable only after a complete backup exists. The old
+        // copy-delete-move sequence ignored every error and could delete the
+        // only executable when the copy failed, leaving App.app/App unmappable.
         NSString *backupPath = [NSString stringWithFormat:@"%@/%@_LiveContainerPatchBackUp", appPath, _infoPlist[@"CFBundleExecutable"]];
-        NSError *err;
-        [fm copyItemAtPath:execPath toPath:backupPath error:&err];
-        [fm removeItemAtPath:execPath error:&err];
-        [fm moveItemAtPath:backupPath toPath:execPath error:&err];
+        NSError *err = nil;
+
+        if (![fm fileExistsAtPath:execPath]) {
+            [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SigningInProgress"];
+            completetionHandler(NO, [NSString stringWithFormat:@"Executable not found: %@", execPath]);
+            return;
+        }
+
+        if ([fm fileExistsAtPath:backupPath] && ![fm removeItemAtPath:backupPath error:&err]) {
+            [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SigningInProgress"];
+            completetionHandler(NO, [NSString stringWithFormat:@"Failed to remove stale executable backup: %@", err.localizedDescription]);
+            return;
+        }
+
+        if (![fm copyItemAtPath:execPath toPath:backupPath error:&err]) {
+            [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SigningInProgress"];
+            completetionHandler(NO, [NSString stringWithFormat:@"Failed to back up executable: %@", err.localizedDescription]);
+            return;
+        }
+
+        NSURL *executableURL = [NSURL fileURLWithPath:execPath];
+        NSURL *backupURL = [NSURL fileURLWithPath:backupPath];
+        if (![fm replaceItemAtURL:executableURL
+                     withItemAtURL:backupURL
+                    backupItemName:nil
+                           options:NSFileManagerItemReplacementUsingNewMetadataOnly
+                             error:&err]) {
+            [NSUserDefaults.standardUserDefaults removeObjectForKey:@"SigningInProgress"];
+            completetionHandler(NO, [NSString stringWithFormat:@"Failed to replace executable safely: %@", err.localizedDescription]);
+            return;
+        }
     }
     
     bool is32bit = false;
