@@ -61,3 +61,34 @@ Swift URL bookmark 初始化器只替换了方法头，遗漏 relativeTo/bookmar
 - 关联文件: (可选)
 
 ---
+## [ERR-20260910-T5I] command
+
+**记录时间**: 2026-09-10T15:36:41Z
+**优先级**: high
+**状态**: pending
+**领域**: infra
+
+### 摘要
+verify_liveprocess_contract.py 在最终回归时因 iSH MemoryError 失败
+
+### Error
+```
+P0 门禁通过；LiveProcess contract 脚本导入 Python json 模块时内存不足，需在资源紧张环境分开执行或提高可用内存后重跑
+```
+
+### Context
+- 尝试的命令/操作：
+- 输入或参数：
+- 环境细节：
+
+### 建议修复
+（待补充）
+
+### 元数据
+- 可复现: unknown
+- 作用域: project
+- 基础路径: /var/minis/workspace/livecontainer-audit/.learnings
+- 项目路径: /var/minis/workspace/livecontainer-audit
+- 关联文件: (可选)
+
+---

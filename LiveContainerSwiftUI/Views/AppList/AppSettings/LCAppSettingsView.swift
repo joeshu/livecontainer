@@ -529,72 +529,118 @@ struct LCAppSettingsView: View {
     func importDataStorage(result: Result<URL, any Error>) async {
         do {
             let url = try result.get()
-            guard url.startAccessingSecurityScopedResource() else {
-                errorInfo = "unable to access directory, startAccessingSecurityScopedResource returns false"
-                errorShow = true
-                return
+            guard url.isFileURL, !url.path.isEmpty,
+                  url.lastPathComponent.isSafePathComponent() else {
+                throw NSError(domain: "LiveContainer", code: 30,
+                              userInfo: [NSLocalizedDescriptionKey: "Selected container has an unsafe directory name"])
             }
-            let path = url.path
-            let fm = FileManager.default
-            let _ = try fm.contentsOfDirectory(atPath: path)
+            guard url.startAccessingSecurityScopedResource() else {
+                throw NSError(domain: "LiveContainer", code: 31,
+                              userInfo: [NSLocalizedDescriptionKey: "Unable to access selected container"])
+            }
+            defer { url.stopAccessingSecurityScopedResource() }
 
-            let v = try url.resourceValues(forKeys: [
-                .volumeIsLocalKey,
-                .volumeIsInternalKey,
-            ])
+            let fm = FileManager.default
+            var isDirectory = ObjCBool(false)
+            guard fm.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                throw NSError(domain: "LiveContainer", code: 32,
+                              userInfo: [NSLocalizedDescriptionKey: "Selected storage is not a directory"])
+            }
+            let contents = try fm.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)
+            let metadataURL = url.appendingPathComponent("LCContainerInfo.plist")
+            let metadataExists = fm.fileExists(atPath: metadataURL.path)
+
+            let v = try url.resourceValues(forKeys: [.volumeIsLocalKey, .volumeIsInternalKey])
             if !(v.volumeIsLocal == true && v.volumeIsInternal == true) {
                 guard let doAdd = await addExternalNonLocalContainerWarningAlert.open(), doAdd else {
                     return
                 }
             }
-            
+
             guard let bookmark = LCUtils.bookmark(for: url) else {
-                errorInfo = "Unable to generate a bookmark for the selected URL!"
-                errorShow = true
-                return
+                throw NSError(domain: "LiveContainer", code: 33,
+                              userInfo: [NSLocalizedDescriptionKey: "Unable to generate a security-scoped bookmark"])
             }
-            
-            var container: LCContainer? = nil
-            if fm.fileExists(atPath: url.appendingPathComponent("LCContainerInfo.plist").path) {
-                let plistInfo = try PropertyListSerialization.propertyList(from: Data(contentsOf: url.appendingPathComponent("LCContainerInfo.plist")), format: nil)
-                if let plistInfo = plistInfo as? [String : Any] {
-                    let name = plistInfo["folderName"] as? String ?? url.lastPathComponent
-                    container = LCContainer(infoDict: ["folderName": url.lastPathComponent, "name": name, "bookmarkData":bookmark], isShared: false)
-                }
+            guard let appIdentifier = appInfo.bundleIdentifier() else {
+                throw NSError(domain: "LiveContainer", code: 34,
+                              userInfo: [NSLocalizedDescriptionKey: "Unable to determine container owner"])
             }
-            if container == nil {
-                // it's an empty folder, we assign a new keychain group to it.
-                container = LCContainer(infoDict: ["folderName": url.lastPathComponent, "name": url.lastPathComponent, "bookmarkData": bookmark], isShared: false)
-                // assign keychain group
-                var keychainGroupSet : Set<Int> = Set(minimumCapacity: 3)
-                for i in 0..<SharedModel.keychainAccessGroupCount {
-                    keychainGroupSet.insert(i)
+
+            let displayName: String
+            let isNewContainer: Bool
+            if metadataExists {
+                let rawMetadata = try PropertyListSerialization.propertyList(
+                    from: Data(contentsOf: metadataURL), format: nil)
+                guard let metadata = rawMetadata as? [String: Any],
+                      metadata["appIdentifier"] as? String == appIdentifier else {
+                    throw NSError(domain: "LiveContainer", code: 35,
+                                  userInfo: [NSLocalizedDescriptionKey: "Selected container belongs to another app or has invalid metadata"])
                 }
-                for container in model.uiContainers {
-                    keychainGroupSet.remove(container.keychainGroupId)
+                if let metadataFolderName = metadata["folderName"] as? String {
+                    guard metadataFolderName == url.lastPathComponent else {
+                        throw NSError(domain: "LiveContainer", code: 36,
+                                      userInfo: [NSLocalizedDescriptionKey: "Container identity does not match its directory"])
+                    }
+                }
+                displayName = (metadata["name"] as? String)?.isEmpty == false
+                    ? (metadata["name"] as! String) : url.lastPathComponent
+                isNewContainer = false
+            } else {
+                guard contents.isEmpty else {
+                    throw NSError(domain: "LiveContainer", code: 37,
+                                  userInfo: [NSLocalizedDescriptionKey: "Cannot claim a non-empty directory without container metadata"])
+                }
+                displayName = url.lastPathComponent
+                isNewContainer = true
+            }
+
+            guard !model.uiContainers.contains(where: { $0.folderName == url.lastPathComponent }) else {
+                throw NSError(domain: "LiveContainer", code: 38,
+                              userInfo: [NSLocalizedDescriptionKey: "Container is already registered"])
+            }
+            let container = LCContainer(infoDict: [
+                "folderName": url.lastPathComponent,
+                "name": displayName,
+                "bookmarkData": bookmark
+            ], isShared: false)
+            guard container.bookmarkResolved && container.hasUsableStorage else {
+                throw NSError(domain: "LiveContainer", code: 39,
+                              userInfo: [NSLocalizedDescriptionKey: "Unable to resolve selected container bookmark"])
+            }
+            if !isNewContainer {
+                try container.validateExternalOwnership(appInfo: appInfo)
+            }
+            if isNewContainer {
+                var keychainGroupSet = Set(0..<SharedModel.keychainAccessGroupCount)
+                for existing in model.uiContainers {
+                    keychainGroupSet.remove(existing.keychainGroupId)
                 }
                 guard let freeKeyChainGroup = keychainGroupSet.randomElement() else {
-                    errorInfo = "lc.container.notEnoughKeychainGroup".loc
-                    errorShow = true
-                    return
+                    throw NSError(domain: "LiveContainer", code: 40,
+                                  userInfo: [NSLocalizedDescriptionKey: "lc.container.notEnoughKeychainGroup".loc])
                 }
-                
-//                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                    if container!.bookmarkResolved {
-                        container!.makeLCContainerInfoPlist(appIdentifier: appInfo.bundleIdentifier()!, keychainGroupId: freeKeyChainGroup)
-                    }
-//                }
+                guard container.makeLCContainerInfoPlist(appIdentifier: appIdentifier,
+                                                          keychainGroupId: freeKeyChainGroup) else {
+                    throw NSError(domain: "LiveContainer", code: 41,
+                                  userInfo: [NSLocalizedDescriptionKey: "Unable to initialize container metadata"])
+                }
             }
-            model.uiContainers.append(container!)
-            appInfo.containers = model.uiContainers;
+
+            var updatedContainers = model.uiContainers
+            updatedContainers.append(container)
+            guard appInfo.replaceContainerInfo(updatedContainers.map { $0.toDict() }, error: nil) else {
+                throw NSError(domain: "LiveContainer", code: 42,
+                              userInfo: [NSLocalizedDescriptionKey: "Unable to persist container registry"])
+            }
+            model.uiContainers = updatedContainers
             if model.uiSelectedContainer == nil {
-                model.uiSelectedContainer = container;
+                model.uiSelectedContainer = container
             }
             if model.uiDefaultDataFolder == nil {
                 model.uiDefaultDataFolder = url.lastPathComponent
                 appInfo.dataUUID = url.lastPathComponent
             }
-
         } catch {
             errorInfo = error.localizedDescription
             errorShow = true
@@ -828,21 +874,10 @@ extension LCAppSettingsView : LCContainerViewDelegate {
         return Bundle(url: URL(fileURLWithPath: appInfo.bundlePath()).appendingPathComponent("Settings.bundle"))
     }
     
-    func getContainerURL(container: LCContainer) -> URL {
-        let preferencesFolderUrl = container.containerURL.appendingPathComponent("Library/Preferences")
-        let fm = FileManager.default
-        do {
-            let doExist = fm.fileExists(atPath: preferencesFolderUrl.path)
-            if !doExist {
-                try fm.createDirectory(at: preferencesFolderUrl, withIntermediateDirectories: true)
-            }
-
-        } catch {
-            errorInfo = "Cannot create Library/Preferences folder!".loc
-            errorShow = true
-        }
-        return container.containerURL
+    func getContainerAccess(container: LCContainer) -> LCContainerAccess? {
+        return LCContainerAccess(container: container)
     }
+
     
 }
 

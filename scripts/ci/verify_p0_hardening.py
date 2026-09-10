@@ -40,6 +40,7 @@ def main() -> int:
     share_bookmark_source = read("ShareExtension/ShareExtensionViewModel.swift")
     ipa_bookmark_source = read("LiveContainerSwiftUI/Views/AppList/LCAppListView.swift")
     tweak_bookmark_source = read("TweakLoader/UIKit+GuestHooks.m")
+    multitask_source = read("MultitaskSupport/AppSceneViewController.m")
 
     for flag in (
         "ARCHIVE_EXTRACT_SECURE_NODOTDOT",
@@ -117,6 +118,10 @@ def main() -> int:
     ):
         if "resolvingBookmarkData" in source or "URLByResolvingBookmarkData" in source:
             require(source, "withSecurityScope" if "resolvingBookmarkData" in source else "NSURLBookmarkResolutionWithSecurityScope", f"{label} security scope option")
+    require(multitask_source, "LCAppendSecurityScopedBookmark", "multitask guarded bookmark creation")
+    require(multitask_source, "LCIsSafeMultitaskPathComponent", "multitask path component guard")
+    forbid(multitask_source, "[bookmarks addObject:bookmarkData]", "multitask nil bookmark insertion")
+    forbid(multitask_source, "bookmarkDataWithOptions:(1<<11)", "multitask bookmark magic number")
     payload = read("LiveProcess/main.m")
     for guard in ("realpath", "S_ISREG", "RTLD_LOCAL", "dlclose(handle)", "custom payload entry not found"):
         require(payload, guard, f"custom payload guard {guard}")

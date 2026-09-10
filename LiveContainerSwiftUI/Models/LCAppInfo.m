@@ -11,6 +11,18 @@
 #include <stdio.h>
 
 
+static BOOL LCIsSafeContainerRecordComponent(NSString *value) {
+    if (![value isKindOfClass:NSString.class] || value.length == 0 || value.length > 255) {
+        return NO;
+    }
+    if ([value isEqualToString:@"."] || [value isEqualToString:@".."] ||
+        [value containsString:@"/"] || [value containsString:@"\\"] ||
+        [value containsString:@":"]) {
+        return NO;
+    }
+    return YES;
+}
+
 @implementation LCAppInfo
 
 - (instancetype)initWithBundlePath:(NSString*)bundlePath {
@@ -297,10 +309,88 @@
 }
 
 - (void)save {
-    if(!_autoSaveDisabled) {
-        [_info writeBinToFile:[NSString stringWithFormat:@"%@/LCAppInfo.plist", _bundlePath] atomically:YES];
+    [self save:nil];
+}
+
+- (BOOL)save:(NSError **)error {
+    if (_autoSaveDisabled) {
+        if (error) *error = [NSError errorWithDomain:@"LiveContainer" code:24 userInfo:@{
+            NSLocalizedDescriptionKey: @"AppInfo autosave is disabled; registry was not persisted"
+        }];
+        return NO;
+    }
+    if (![_info isKindOfClass:NSMutableDictionary.class] ||
+        ![_bundlePath isKindOfClass:NSString.class] || _bundlePath.length == 0) {
+        if (error) {
+            *error = [NSError errorWithDomain:@"LiveContainer" code:20 userInfo:@{
+                NSLocalizedDescriptionKey: @"Invalid AppInfo save state"
+            }];
+        }
+        return NO;
+    }
+    NSString *path = [_bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"];
+    NSError *serializationError = nil;
+    NSData *plistData = [NSPropertyListSerialization dataWithPropertyList:_info
+                                                                     format:NSPropertyListBinaryFormat_v1_0
+                                                                    options:0
+                                                                      error:&serializationError];
+    if (!plistData) {
+        if (error) *error = serializationError;
+        return NO;
+    }
+    NSError *writeError = nil;
+    BOOL success = [plistData writeToFile:path options:NSDataWritingAtomic error:&writeError];
+    if (!success && error) *error = writeError;
+    return success;
+}
+
+- (BOOL)replaceContainerInfo:(NSArray<NSDictionary *> *)containerInfo error:(NSError **)error {
+    if (![containerInfo isKindOfClass:NSArray.class]) {
+        if (error) *error = [NSError errorWithDomain:@"LiveContainer" code:21 userInfo:@{
+            NSLocalizedDescriptionKey: @"Container registry must be an array"
+        }];
+        return NO;
+    }
+    NSMutableSet<NSString *> *folderNames = [NSMutableSet setWithCapacity:containerInfo.count];
+    for (id rawRecord in containerInfo) {
+        if (![rawRecord isKindOfClass:NSDictionary.class]) {
+            if (error) *error = [NSError errorWithDomain:@"LiveContainer" code:22 userInfo:@{
+                NSLocalizedDescriptionKey: @"Container registry contains a non-dictionary record"
+            }];
+            return NO;
+        }
+        NSDictionary *record = (NSDictionary *)rawRecord;
+        NSString *folderName = record[@"folderName"];
+        NSString *name = record[@"name"];
+        NSData *bookmark = record[@"bookmarkData"];
+        if (!LCIsSafeContainerRecordComponent(folderName) ||
+            ![name isKindOfClass:NSString.class] || name.length == 0 ||
+            (bookmark && ![bookmark isKindOfClass:NSData.class]) ||
+            [folderNames containsObject:folderName]) {
+            if (error) *error = [NSError errorWithDomain:@"LiveContainer" code:23 userInfo:@{
+                NSLocalizedDescriptionKey: @"Invalid or duplicate container registry record"
+            }];
+            return NO;
+        }
+        [folderNames addObject:folderName];
     }
 
+    id oldValue = _info[@"LCContainers"];
+    _info[@"LCContainers"] = [containerInfo copy];
+    // Installation replacement intentionally stages AppInfo in memory while
+    // autosave is disabled. Callers that require durable persistence use the
+    // error-returning save path with autosave enabled.
+    if (_autoSaveDisabled) {
+        return YES;
+    }
+    NSError *saveError = nil;
+    if (![self save:&saveError]) {
+        if (oldValue) _info[@"LCContainers"] = oldValue;
+        else [_info removeObjectForKey:@"LCContainers"];
+        if (error) *error = saveError;
+        return NO;
+    }
+    return YES;
 }
 
 - (void)patchExecAndSignIfNeedWithCompletionHandler:(void(^)(bool success, NSString* errorInfo))completetionHandler progressHandler:(void(^)(NSProgress* progress))progressHandler forceSign:(BOOL)forceSign {
@@ -711,8 +801,10 @@
 }
 
 - (void)setContainerInfo:(NSArray<NSDictionary *> *)containerInfo {
-    _info[@"LCContainers"] = containerInfo;
-    [self save];
+    NSError *error = nil;
+    if (![self replaceContainerInfo:containerInfo error:&error]) {
+        NSLog(@"[LC] rejected invalid container registry: %@", error.localizedDescription);
+    }
 }
 
 - (bool)is32bit {

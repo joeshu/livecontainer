@@ -567,7 +567,24 @@ static NSString *LCJSONStringForDiagnostics(NSDictionary *diagnostics) {
 }
 
 + (NSData*)bookmarkForURL:(NSURL*) url {
-    return [url bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0];
+    if (![url isKindOfClass:NSURL.class] || !url.isFileURL || url.path.length == 0) {
+        return nil;
+    }
+    NSFileManager *fm = NSFileManager.defaultManager;
+    BOOL isDirectory = NO;
+    if (![fm fileExistsAtPath:url.path isDirectory:&isDirectory] || !isDirectory) {
+        return nil;
+    }
+    NSError *error = nil;
+    NSData *bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+                         includingResourceValuesForKeys:nil
+                                          relativeToURL:nil
+                                                  error:&error];
+    if (!bookmark || error) {
+        NSLog(@"[LC] failed to create security-scoped bookmark for %@: %@", url.path, error.localizedDescription);
+        return nil;
+    }
+    return bookmark;
 }
 
 

@@ -64,8 +64,8 @@
 
 ### Phase 5：P1/P2 生命周期
 
-- [ ] security-scoped bookmark start/stop 成对
-- [ ] stale bookmark 重新生成
+- [x] security-scoped bookmark start/stop 成对（容器导入、容器设置页、多任务交接；LiveProcess/Bootstrap 的进程级 scope 仍需真机确认）
+- [x] stale bookmark 重新生成（启动前与多任务交接；真实 AppInfo 持久化与真机行为仍需验证）
 - [ ] XPC audit token/entitlement 校验
 - [ ] continuation actor 化
 - [ ] cookie/background URLSession 按 Guest 隔离

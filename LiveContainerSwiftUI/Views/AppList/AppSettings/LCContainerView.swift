@@ -14,7 +14,7 @@ protocol LCContainerViewDelegate {
     func getAppModel() -> LCAppModel
     
     func getSettingsBundle() -> Bundle?
-    func getContainerURL(container: LCContainer) -> URL
+    func getContainerAccess(container: LCContainer) -> LCContainerAccess?
     func getBundleId() -> String
 }
 
@@ -76,7 +76,12 @@ struct LCContainerView : View {
                     
                     if let settingsBundle, container.hasUsableStorage {
                         NavigationLink {
-                            AppPreferenceView(bundleId: delegate.getBundleId(), settingsBundle: settingsBundle, containerURL: delegate.getContainerURL(container: container))
+                            if let access = delegate.getContainerAccess(container: container) {
+                                AppPreferenceView(bundleId: delegate.getBundleId(), settingsBundle: settingsBundle, access: access)
+                            } else {
+                                Text("Unable to access container")
+                                    .foregroundStyle(.secondary)
+                            }
                         } label: {
                             Text("lc.container.preferences".loc)
                         }

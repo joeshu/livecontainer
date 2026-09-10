@@ -199,13 +199,13 @@ struct PSChildPane: View {
     let rootPlistUrl : URL
     let bundleId : String
     let settingsBundle : Bundle
-    let containerURL : URL
+    let access: LCContainerAccess
     
     let delegate : LCAppPreferencesDelegate
     
     var body: some View {
         NavigationLink {
-            AppPreferencePageView(preferencePlistURL: rootPlistUrl, bundleId: bundleId, containerURL: containerURL, settingsBundle: settingsBundle)
+            AppPreferencePageView(preferencePlistURL: rootPlistUrl, bundleId: bundleId, access: access, settingsBundle: settingsBundle)
                 .navigationTitle(delegate.localize(title))
         } label: {
             Text(delegate.localize(title))
@@ -235,13 +235,15 @@ struct PSGroup: View {
 
 struct AppPreferencePageView : View {
     let preferencePlistURL : URL
+    let access: LCContainerAccess
     
     @State var children : [AnyView] = []
     @State var errorInfo : String?
 
-    init(preferencePlistURL : URL, bundleId : String, containerURL : URL, settingsBundle: Bundle) {
+    init(preferencePlistURL : URL, bundleId : String, access: LCContainerAccess, settingsBundle: Bundle) {
         var children : [AnyView] = []
         self.preferencePlistURL = preferencePlistURL
+        self.access = access
         guard let dict = NSMutableDictionary(contentsOf: preferencePlistURL) else {
             errorInfo = "Failed to load preference."
             return
@@ -253,7 +255,7 @@ struct AppPreferencePageView : View {
         let suiteName = dict["ApplicationGroupContainerIdentifier"] as? String ?? bundleId
         let stringTable = dict["StringsTable"] as? String ?? nil
         
-        let userDefaults = UserDefaults()._init(withSuiteName: suiteName, container: containerURL)!
+        let userDefaults = UserDefaults()._init(withSuiteName: suiteName, container: access.url)!
         let delegate = AppPreferenceModel(settingsBundle: settingsBundle, userDefaults:userDefaults, table: stringTable)
         
         var currGroup : [String:Any]? = nil
@@ -293,7 +295,7 @@ struct AppPreferencePageView : View {
                     continue
                 }
                 let fileURL = preferencePlistURL.deletingLastPathComponent().appendingPathComponent(file).appendingPathExtension("plist")
-                currView = PSChildPane(title: title, rootPlistUrl: fileURL, bundleId: bundleId, settingsBundle: settingsBundle, containerURL: containerURL, delegate: delegate)
+                currView = PSChildPane(title: title, rootPlistUrl: fileURL, bundleId: bundleId, settingsBundle: settingsBundle, access: access, delegate: delegate)
                 
             } else if type == "PSGroupSpecifier" {
 
@@ -385,17 +387,17 @@ struct AppPreferenceView: View {
     let rootPlistUrl : URL
     let bundleId : String
     let settingsBundle : Bundle
-    let containerURL : URL
+    let access: LCContainerAccess
     
-    init(bundleId: String, settingsBundle: Bundle, containerURL: URL) {
+    init(bundleId: String, settingsBundle: Bundle, access: LCContainerAccess) {
         self.bundleId = bundleId
         self.settingsBundle = settingsBundle
-        self.containerURL = containerURL
+        self.access = access
         self.rootPlistUrl = settingsBundle.bundleURL.appendingPathComponent("Root.plist")
 
     }
 
     var body: some View {
-        AppPreferencePageView(preferencePlistURL: rootPlistUrl, bundleId: bundleId, containerURL : containerURL, settingsBundle: settingsBundle)
+        AppPreferencePageView(preferencePlistURL: rootPlistUrl, bundleId: bundleId, access: access, settingsBundle: settingsBundle)
     }
 }

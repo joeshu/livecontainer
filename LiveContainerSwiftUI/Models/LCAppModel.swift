@@ -273,7 +273,15 @@ class LCAppModel: ObservableObject, Hashable {
             }
             uiSelectedContainer = selected
         }
-        let currentDataFolder = containerFolderName ?? uiSelectedContainer?.folderName
+        guard let selectedContainer = uiSelectedContainer else {
+            throw "lc.container.notFound".loc
+        }
+        // External containers are authoritative only when the bookmark target
+        // still belongs to this app. Renew stale bookmarks before constructing
+        // any launch request, and fail closed if persistence fails.
+        try selectedContainer.validateExternalOwnership(appInfo: appInfo)
+        try selectedContainer.renewStaleBookmarkIfNeeded(appInfo: appInfo)
+        let currentDataFolder = containerFolderName ?? selectedContainer.folderName
         
         let classicMode = appInfo.defaultClassicMode
         let multitask = classicMode == 0 ? (multitask ?? shouldLaunchInMultitaskMode) : false

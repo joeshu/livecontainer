@@ -7,6 +7,47 @@
 
 import Foundation
 
+/// Owns a security-scoped access session for the lifetime of a settings view.
+/// Passing the URL without this owner would leave external-container access
+/// dependent on whichever caller last started the scope.
+final class LCContainerAccess {
+    let url: URL
+    private let needsStop: Bool
+
+    init?(container: LCContainer) {
+        guard container.hasUsableStorage else { return nil }
+        let url = container.containerURL
+        let needsStop = container.storageBookMark != nil
+        if needsStop && !url.startAccessingSecurityScopedResource() {
+            return nil
+        }
+        var isDirectory = ObjCBool(false)
+        guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+              isDirectory.boolValue else {
+            if needsStop { url.stopAccessingSecurityScopedResource() }
+            return nil
+        }
+        do {
+            let preferencesURL = url.appendingPathComponent("Library/Preferences", isDirectory: true)
+            if !FileManager.default.fileExists(atPath: preferencesURL.path) {
+                try FileManager.default.createDirectory(at: preferencesURL,
+                                                        withIntermediateDirectories: true)
+            }
+        } catch {
+            if needsStop { url.stopAccessingSecurityScopedResource() }
+            return nil
+        }
+        self.url = url
+        self.needsStop = needsStop
+    }
+
+    deinit {
+        if needsStop {
+            url.stopAccessingSecurityScopedResource()
+        }
+    }
+}
+
 class LCContainer : ObservableObject, Hashable {
     @Published var folderName : String
     @Published var name : String
@@ -15,6 +56,7 @@ class LCContainer : ObservableObject, Hashable {
     @Published var storageBookMark: Data?
     @Published var resolvedContainerURL: URL?
     @Published var bookmarkResolved = false
+    @Published var bookmarkIsStale = false
     var bookmarkResolveContinuation: UnsafeContinuation<(), Never>? = nil
     
     @Published var isolateAppGroup : Bool
@@ -29,7 +71,112 @@ class LCContainer : ObservableObject, Hashable {
     public var spoofedIdentifier: String?
     private var infoDict : [String:Any]?
     public var hasUsableStorage: Bool {
-        storageBookMark == nil || resolvedContainerURL != nil
+        let safeFolderName = folderName.isSafePathComponent() ||
+            (folderName.isEmpty && resolvedContainerURL != nil && storageBookMark == nil)
+        return safeFolderName && (storageBookMark == nil || resolvedContainerURL != nil)
+    }
+
+    private func withContainerAccess<T>(_ body: (URL) throws -> T) throws -> T {
+        guard let url = resolvedContainerURL ?? (storageBookMark == nil ? containerURL : nil) else {
+            throw NSError(domain: "LiveContainer", code: 2,
+                          userInfo: [NSLocalizedDescriptionKey: "Container bookmark is unavailable"])
+        }
+        let accessed = storageBookMark == nil || url.startAccessingSecurityScopedResource()
+        guard accessed else {
+            throw NSError(domain: "LiveContainer", code: 3,
+                          userInfo: [NSLocalizedDescriptionKey: "Unable to access container bookmark"])
+        }
+        defer {
+            if storageBookMark != nil {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+        return try body(url)
+    }
+
+    private func readInfoDict() -> [String: Any]? {
+        do {
+            return try withContainerAccess { url in
+                NSDictionary(contentsOf: url.appendingPathComponent("LCContainerInfo.plist")) as? [String: Any]
+            }
+        } catch {
+            return nil
+        }
+    }
+
+    private func validateExternalMetadata(at url: URL, expectedAppIdentifier: String) throws {
+        let metadataURL = url.appendingPathComponent("LCContainerInfo.plist")
+        guard let metadata = NSDictionary(contentsOf: metadataURL) as? [String: Any],
+              metadata["appIdentifier"] as? String == expectedAppIdentifier else {
+            throw NSError(domain: "LiveContainer", code: 4,
+                          userInfo: [NSLocalizedDescriptionKey: "Container metadata owner mismatch"])
+        }
+        if let metadataFolderName = metadata["folderName"] as? String {
+            guard metadataFolderName == folderName else {
+                throw NSError(domain: "LiveContainer", code: 5,
+                              userInfo: [NSLocalizedDescriptionKey: "Container metadata identity mismatch"])
+            }
+        } else {
+            // Older metadata did not persist folderName. The registered name
+            // must still match the bookmark target's final directory component.
+            guard url.lastPathComponent == folderName else {
+                throw NSError(domain: "LiveContainer", code: 5,
+                              userInfo: [NSLocalizedDescriptionKey: "Legacy container identity mismatch"])
+            }
+        }
+    }
+
+    func validateExternalOwnership(appInfo: LCAppInfo) throws {
+        guard storageBookMark != nil else { return }
+        guard let appIdentifier = appInfo.bundleIdentifier() else {
+            throw NSError(domain: "LiveContainer", code: 6,
+                          userInfo: [NSLocalizedDescriptionKey: "Unable to determine container owner"])
+        }
+        try withContainerAccess { url in
+            var isDirectory = ObjCBool(false)
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                throw NSError(domain: "LiveContainer", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Container bookmark must resolve to a directory"])
+            }
+            try validateExternalMetadata(at: url, expectedAppIdentifier: appIdentifier)
+        }
+    }
+
+    func renewStaleBookmarkIfNeeded(appInfo: LCAppInfo) throws {
+        guard storageBookMark != nil, bookmarkIsStale else { return }
+        guard let appIdentifier = appInfo.bundleIdentifier() else {
+            throw NSError(domain: "LiveContainer", code: 6,
+                          userInfo: [NSLocalizedDescriptionKey: "Unable to determine container owner"])
+        }
+
+        let renewedBookmark = try withContainerAccess { url in
+            var isDirectory = ObjCBool(false)
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                  isDirectory.boolValue else {
+                throw NSError(domain: "LiveContainer", code: 1,
+                              userInfo: [NSLocalizedDescriptionKey: "Container bookmark must resolve to a directory"])
+            }
+            try validateExternalMetadata(at: url, expectedAppIdentifier: appIdentifier)
+            return try url.bookmarkData(options: [.withSecurityScope],
+                                        includingResourceValuesForKeys: nil,
+                                        relativeTo: nil)
+        }
+
+        guard var records = appInfo.containerInfo as? [[String: Any]],
+              let index = records.firstIndex(where: { $0["folderName"] as? String == folderName }) else {
+            throw NSError(domain: "LiveContainer", code: 7,
+                          userInfo: [NSLocalizedDescriptionKey: "Container registration not found"])
+        }
+        records[index]["bookmarkData"] = renewedBookmark
+        var saveError: NSError?
+        guard appInfo.replaceContainerInfo(records, error: &saveError) else {
+            throw saveError ?? NSError(domain: "LiveContainer", code: 8,
+                                       userInfo: [NSLocalizedDescriptionKey: "Unable to persist renewed container bookmark"])
+        }
+        // Commit the in-memory bookmark only after the atomic registry write succeeds.
+        storageBookMark = renewedBookmark
+        bookmarkIsStale = false
     }
 
     public var containerURL : URL {
@@ -50,12 +197,9 @@ class LCContainer : ObservableObject, Hashable {
         get {
             guard hasUsableStorage else { return -1 }
             if infoDict == nil {
-                infoDict = NSDictionary(contentsOf: infoDictUrl) as? [String : Any]
+                infoDict = readInfoDict()
             }
-            guard let infoDict else {
-                return -1
-            }
-            return infoDict["keychainGroupId"] as? Int ?? -1
+            return infoDict?["keychainGroupId"] as? Int ?? -1
         }
     }
     
@@ -63,12 +207,9 @@ class LCContainer : ObservableObject, Hashable {
         get {
             guard hasUsableStorage else { return nil }
             if infoDict == nil {
-                infoDict = NSDictionary(contentsOf: infoDictUrl) as? [String : Any]
+                infoDict = readInfoDict()
             }
-            guard let infoDict else {
-                return nil
-            }
-            return infoDict["appIdentifier"] as? String ?? nil
+            return infoDict?["appIdentifier"] as? String
         }
     }
     
@@ -120,6 +261,7 @@ class LCContainer : ObservableObject, Hashable {
                                   userInfo: [NSLocalizedDescriptionKey: "Bookmark must resolve to an accessible directory"])
                 }
                 self.resolvedContainerURL = url
+                self.bookmarkIsStale = isStale
             } catch {
                 // Do not fall back to the private container with the same name.
                 // An external bookmark is the authority for this container.
@@ -136,20 +278,13 @@ class LCContainer : ObservableObject, Hashable {
             return
         }
 
-        do {
-            let fm = FileManager.default
-            if(!fm.fileExists(atPath: infoDictUrl.deletingLastPathComponent().path)) {
-                try fm.createDirectory(at: infoDictUrl.deletingLastPathComponent(), withIntermediateDirectories: true)
-            }
-            
-            let plistInfo = try PropertyListSerialization.propertyList(from: Data(contentsOf: infoDictUrl), format: nil)
-            if let plistInfo = plistInfo as? [String : Any] {
-                isolateAppGroup = plistInfo["isolateAppGroup"] as? Bool ?? false
-                spoofIdentifierForVendor = plistInfo["spoofIdentifierForVendor"] as? Bool ?? false
-                spoofedIdentifier = plistInfo["spoofedIdentifierForVendor"] as? String
-            }
-        } catch {
-            
+        // Metadata reads must also go through the access helper. Do not create
+        // an external directory merely because its metadata is missing.
+        if let plistInfo = readInfoDict() {
+            isolateAppGroup = plistInfo["isolateAppGroup"] as? Bool ?? false
+            spoofIdentifierForVendor = plistInfo["spoofIdentifierForVendor"] as? Bool ?? false
+            spoofedIdentifier = plistInfo["spoofedIdentifierForVendor"] as? String
+            infoDict = plistInfo
         }
         if let securityScopedURL {
             securityScopedURL.stopAccessingSecurityScopedResource()
@@ -167,31 +302,56 @@ class LCContainer : ObservableObject, Hashable {
         return ans
     }
     
-    func makeLCContainerInfoPlist(appIdentifier : String, keychainGroupId : Int) {
+    @discardableResult
+    func makeLCContainerInfoPlist(appIdentifier : String, keychainGroupId : Int) -> Bool {
         guard hasUsableStorage else {
-            return
+            return false
         }
-        infoDict = [
+        var newInfo: [String: Any] = [
             "appIdentifier" : appIdentifier,
+            "folderName" : folderName,
             "name" : name,
             "keychainGroupId" : keychainGroupId,
             "isolateAppGroup" : isolateAppGroup,
             "spoofIdentifierForVendor": spoofIdentifierForVendor
         ]
         if let spoofedIdentifier {
-            infoDict!["spoofedIdentifierForVendor"] = spoofedIdentifier
+            newInfo["spoofedIdentifierForVendor"] = spoofedIdentifier
         }
-        
         do {
-            let fm = FileManager.default
-            if(!fm.fileExists(atPath: infoDictUrl.deletingLastPathComponent().path)) {
-                try fm.createDirectory(at: infoDictUrl.deletingLastPathComponent(), withIntermediateDirectories: true)
+            return try withContainerAccess { url in
+                let fm = FileManager.default
+                let directory = url.standardizedFileURL
+                var isDirectory = ObjCBool(false)
+                let exists = fm.fileExists(atPath: directory.path, isDirectory: &isDirectory)
+                if storageBookMark == nil {
+                    if !exists {
+                        try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+                    }
+                } else {
+                    guard exists, isDirectory.boolValue else { return false }
+                }
+                guard fm.fileExists(atPath: directory.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else { return false }
+                let target = directory.appendingPathComponent("LCContainerInfo.plist")
+                if storageBookMark != nil && fm.fileExists(atPath: target.path) {
+                    guard let existing = NSDictionary(contentsOf: target) as? [String: Any],
+                          existing["appIdentifier"] as? String == appIdentifier else {
+                        return false
+                    }
+                    if let existingFolderName = existing["folderName"] as? String,
+                       existingFolderName != folderName {
+                        return false
+                    }
+                }
+                let plistData = try PropertyListSerialization.data(fromPropertyList: newInfo,
+                                                                    format: .binary, options: 0)
+                try plistData.write(to: target, options: [.atomic])
+                infoDict = newInfo
+                return true
             }
-            
-            let plistData = try PropertyListSerialization.data(fromPropertyList: infoDict as Any, format: .binary, options: 0)
-            try plistData.write(to: infoDictUrl)
         } catch {
-            
+            return false
         }
     }
     
@@ -200,7 +360,7 @@ class LCContainer : ObservableObject, Hashable {
             infoDict = nil
             return
         }
-        infoDict = NSDictionary(contentsOf: infoDictUrl) as? [String : Any]
+        infoDict = readInfoDict()
     }
 
     func loadName() {

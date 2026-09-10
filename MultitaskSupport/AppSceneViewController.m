@@ -29,6 +29,47 @@
 @property(nonatomic) bool isAppTerminationCleanUpCalled;
 @end
 
+static BOOL LCIsSafeMultitaskPathComponent(NSString *value) {
+    if (![value isKindOfClass:NSString.class] || value.length == 0 || value.length > 255) {
+        return NO;
+    }
+    if ([value isEqualToString:@"."] || [value isEqualToString:@".."] ||
+        [value containsString:@"/"] || [value containsString:@"\\"] ||
+        [value rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location != NSNotFound) {
+        return NO;
+    }
+    return YES;
+}
+
+static BOOL LCAppendSecurityScopedBookmark(NSMutableArray *bookmarks, NSURL *url, NSError **error) {
+    if (![url isKindOfClass:NSURL.class] || !url.isFileURL || url.path.length == 0) {
+        if (error) *error = [NSError errorWithDomain:@"LiveContainer" code:40 userInfo:@{
+            NSLocalizedDescriptionKey: @"Cannot create a bookmark for an invalid file URL"
+        }];
+        return NO;
+    }
+    BOOL isDirectory = NO;
+    if (![NSFileManager.defaultManager fileExistsAtPath:url.path isDirectory:&isDirectory] || !isDirectory) {
+        if (error) *error = [NSError errorWithDomain:@"LiveContainer" code:41 userInfo:@{
+            NSLocalizedDescriptionKey: [NSString stringWithFormat:@"Bookmark target is not an existing directory: %@", url.path]
+        }];
+        return NO;
+    }
+    NSError *bookmarkError = nil;
+    NSData *bookmark = [url bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+                         includingResourceValuesForKeys:nil
+                                          relativeToURL:nil
+                                                  error:&bookmarkError];
+    if (!bookmark) {
+        if (error) *error = bookmarkError ?: [NSError errorWithDomain:@"LiveContainer" code:42 userInfo:@{
+            NSLocalizedDescriptionKey: @"Unable to create security-scoped bookmark"
+        }];
+        return NO;
+    }
+    [bookmarks addObject:bookmark];
+    return YES;
+}
+
 @implementation AppSceneViewController
 
 
@@ -72,23 +113,128 @@
     }
     
     NSURL *docURL = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory inDomains:NSUserDomainMask].lastObject;
-    if ([NSUserDefaults.standardUserDefaults boolForKey:@"LCSharePrivateDataWithLiveProcess"]) {
-        NSData* bookmarkData = [docURL bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0];
-        [bookmarks addObject:bookmarkData];
+    NSError *bookmarkError = nil;
+    if (!docURL) {
+        bookmarkError = [NSError errorWithDomain:@"LiveContainer" code:30 userInfo:@{
+            NSLocalizedDescriptionKey: @"Unable to resolve LiveContainer Documents directory"
+        }];
+    } else if ([NSUserDefaults.standardUserDefaults boolForKey:@"LCSharePrivateDataWithLiveProcess"]) {
+        if (!LCAppendSecurityScopedBookmark(bookmarks, docURL, &bookmarkError)) {
+            [delegate appSceneVC:self didInitializeWithError:bookmarkError];
+            return nil;
+        }
     } else {
         bool isSharedApp = false;
         NSBundle* bundle = [LCSharedUtils findBundleWithBundleId:bundleId isSharedAppOut:&isSharedApp];
-        // when mutlitask with private app, we can restrict its sandbox to only its own container
+        // For a private app, restrict LiveProcess to the bundle, the selected
+        // container, and Tweaks. Never reconstruct an external container from
+        // Data/Application/<folder>; the registered bookmark is authoritative.
         if (!isSharedApp) {
-            NSURL *dataURL = [docURL URLByAppendingPathComponent:[NSString stringWithFormat:@"Data/Application/%@", dataUUID]];
-            NSURL *tweaksURL = [docURL URLByAppendingPathComponent:@"Tweaks"];
-            [bookmarks addObject:[bundle.bundleURL bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0]];
-            NSData* containerBookmark = [dataURL bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0];
-            if(containerBookmark) {
-                [bookmarks addObject:containerBookmark];
+            if (!bundle) {
+                bookmarkError = [NSError errorWithDomain:@"LiveContainer" code:31 userInfo:@{
+                    NSLocalizedDescriptionKey: @"Unable to locate selected guest bundle"
+                }];
+            } else if (!LCAppendSecurityScopedBookmark(bookmarks, bundle.bundleURL, &bookmarkError)) {
+                // bookmarkError is populated by the helper.
+            } else {
+                NSDictionary *guestInfo = [NSDictionary dictionaryWithContentsOfFile:
+                    [bundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]];
+                NSArray *containerRecords = guestInfo[@"LCContainers"];
+                NSData *registeredBookmark = nil;
+                BOOL hasContainerRegistry = [containerRecords isKindOfClass:NSArray.class];
+                if (hasContainerRegistry) {
+                    for (id rawRecord in containerRecords) {
+                        if (![rawRecord isKindOfClass:NSDictionary.class]) continue;
+                        NSDictionary *record = (NSDictionary *)rawRecord;
+                        if ([record[@"folderName"] isKindOfClass:NSString.class] &&
+                            [record[@"folderName"] isEqualToString:dataUUID]) {
+                            if (record[@"bookmarkData"] &&
+                                ![record[@"bookmarkData"] isKindOfClass:NSData.class]) {
+                                bookmarkError = [NSError errorWithDomain:@"LiveContainer" code:32 userInfo:@{
+                                    NSLocalizedDescriptionKey: @"Selected container bookmark has an invalid type"
+                                }];
+                            } else {
+                                registeredBookmark = record[@"bookmarkData"];
+                            }
+                            break;
+                        }
+                    }
+                    if (!bookmarkError && !registeredBookmark) {
+                        bookmarkError = [NSError errorWithDomain:@"LiveContainer" code:33 userInfo:@{
+                            NSLocalizedDescriptionKey: @"Selected container is not registered for this guest"
+                        }];
+                    }
+                } else {
+                    NSString *legacyUUID = guestInfo[@"LCDataUUID"];
+                    if (![legacyUUID isKindOfClass:NSString.class] ||
+                        ![legacyUUID isEqualToString:dataUUID] ||
+                        !LCIsSafeMultitaskPathComponent(dataUUID)) {
+                        bookmarkError = [NSError errorWithDomain:@"LiveContainer" code:34 userInfo:@{
+                            NSLocalizedDescriptionKey: @"Selected container cannot be verified against guest metadata"
+                        }];
+                    }
+                }
+
+                if (!bookmarkError) {
+                    if (registeredBookmark) {
+                        BOOL stale = NO;
+                        NSError *resolveError = nil;
+                        NSURL *resolved = [NSURL URLByResolvingBookmarkData:registeredBookmark
+                                                                      options:NSURLBookmarkResolutionWithSecurityScope
+                                                                relativeToURL:nil
+                                                          bookmarkDataIsStale:&stale
+                                                                        error:&resolveError];
+                        BOOL isDirectory = NO;
+                        if (!resolved || !resolved.isFileURL ||
+                            ![NSFileManager.defaultManager fileExistsAtPath:resolved.path
+                                                                 isDirectory:&isDirectory] ||
+                            !isDirectory || ![resolved startAccessingSecurityScopedResource]) {
+                            bookmarkError = resolveError ?: [NSError errorWithDomain:@"LiveContainer" code:35 userInfo:@{
+                                NSLocalizedDescriptionKey: @"Unable to access selected external container bookmark"
+                            }];
+                        } else {
+                            NSData *bookmarkForRequest = registeredBookmark;
+                            if (stale) {
+                                NSError *renewError = nil;
+                                NSData *renewed = [resolved bookmarkDataWithOptions:NSURLBookmarkCreationWithSecurityScope
+                                             includingResourceValuesForKeys:nil relativeToURL:nil error:&renewError];
+                                if (renewed) {
+                                    bookmarkForRequest = renewed;
+                                } else {
+                                    bookmarkError = renewError ?: [NSError errorWithDomain:@"LiveContainer" code:37 userInfo:@{
+                                        NSLocalizedDescriptionKey: @"Unable to renew stale external container bookmark"
+                                    }];
+                                }
+                            }
+                            if (!bookmarkError) {
+                                [bookmarks addObject:bookmarkForRequest];
+                            }
+                            [resolved stopAccessingSecurityScopedResource];
+                        }
+                    } else {
+                        if (!LCIsSafeMultitaskPathComponent(dataUUID)) {
+                            bookmarkError = [NSError errorWithDomain:@"LiveContainer" code:36 userInfo:@{
+                                NSLocalizedDescriptionKey: @"Selected container name is unsafe"
+                            }];
+                        } else {
+                            NSURL *dataURL = [docURL URLByAppendingPathComponent:
+                                [NSString stringWithFormat:@"Data/Application/%@", dataUUID]];
+                            if (!LCAppendSecurityScopedBookmark(bookmarks, dataURL, &bookmarkError)) {
+                                // bookmarkError is populated by the helper.
+                            }
+                        }
+                    }
+                }
+                NSURL *tweaksURL = [docURL URLByAppendingPathComponent:@"Tweaks"];
+                if (!bookmarkError && !LCAppendSecurityScopedBookmark(bookmarks, tweaksURL, &bookmarkError)) {
+                    // bookmarkError is populated by the helper.
+                }
             }
-            [bookmarks addObject:[tweaksURL bookmarkDataWithOptions:(1<<11) includingResourceValuesForKeys:0 relativeToURL:0 error:0]];
         }
+    }
+    if (bookmarkError) {
+        [delegate appSceneVC:self didInitializeWithError:bookmarkError];
+        return nil;
     }
     item.userInfo = userInfo;
     
