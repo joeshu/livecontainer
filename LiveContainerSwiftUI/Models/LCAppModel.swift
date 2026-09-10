@@ -16,7 +16,30 @@ class LCAppModel: ObservableObject, Hashable {
     @Published var isAppRunning = false
     @Published var isSigningInProgress = false
     @Published var signProgress = 0.0
+    private let launchStateLock = NSLock()
+    private var launchInFlight = false
     private var observer : NSKeyValueObservation?
+
+    private func acquireLaunchSlot() -> Bool {
+        launchStateLock.lock()
+        defer { launchStateLock.unlock() }
+        guard !launchInFlight else { return false }
+        launchInFlight = true
+        return true
+    }
+
+    private func releaseLaunchSlot() {
+        launchStateLock.lock()
+        launchInFlight = false
+        launchStateLock.unlock()
+    }
+
+    private func clearPendingLaunchState() {
+        let defaults = UserDefaults.standard
+        defaults.removeObject(forKey: "selected")
+        defaults.removeObject(forKey: "selectedContainer")
+        defaults.removeObject(forKey: "launchAppUrlScheme")
+    }
     
     @Published var uiIsJITNeeded : Bool {
         didSet {
@@ -211,8 +234,17 @@ class LCAppModel: ObservableObject, Hashable {
     
     // You should let LCAppModel.runApp to decide whether to run in multitask mode, but you may override the multitask parameter if necessary
     func runApp(multitask: Bool? = nil, containerFolderName : String? = nil, bundleIdOverride : String? = nil, urlStr : String? = nil, forceJIT: Bool? = nil) async throws{
+        guard acquireLaunchSlot() else { return }
+        defer { releaseLaunchSlot() }
         if isAppRunning {
             return
+        }
+        var launchStateOwned = false
+        var launchSucceeded = false
+        defer {
+            if launchStateOwned && !launchSucceeded {
+                clearPendingLaunchState()
+            }
         }
         
         if uiContainers.isEmpty {
@@ -223,12 +255,18 @@ class LCAppModel: ObservableObject, Hashable {
                 uiSelectedContainer = newContainer;
             }
             appInfo.containers = uiContainers;
-            newContainer.makeLCContainerInfoPlist(appIdentifier: appInfo.bundleIdentifier()!, keychainGroupId: Int.random(in: 0..<SharedModel.keychainAccessGroupCount))
+            guard let appIdentifier = appInfo.bundleIdentifier() else {
+                throw "lc.appList.infoPlistCannotReadError".loc
+            }
+            newContainer.makeLCContainerInfoPlist(appIdentifier: appIdentifier, keychainGroupId: Int.random(in: 0..<SharedModel.keychainAccessGroupCount))
             appInfo.dataUUID = newName
             uiDefaultDataFolder = newName
         }
         if let containerFolderName {
-            uiSelectedContainer = uiContainers.first { $0.folderName == containerFolderName } ?? uiSelectedContainer
+            guard let selected = uiContainers.first(where: { $0.folderName == containerFolderName }) else {
+                throw "lc.container.notFound".loc
+            }
+            uiSelectedContainer = selected
         }
         let currentDataFolder = containerFolderName ?? uiSelectedContainer?.folderName
         
@@ -322,6 +360,7 @@ class LCAppModel: ObservableObject, Hashable {
         }
         try await signApp(force: false)
         
+        launchStateOwned = true
         if let bundleIdOverride {
             UserDefaults.standard.set(bundleIdOverride, forKey: "selected")
         } else {
@@ -377,8 +416,12 @@ class LCAppModel: ObservableObject, Hashable {
                 let fileURL = FileManager.default.urls(for: .libraryDirectory, in: .userDomainMask)[0].appendingPathComponent("preloadLibraries.txt")
                 try fileContents?.write(to: fileURL)
             }
-            LCSharedUtils.launchToGuestApp(withClassicMode: classicMode)
+            let launchRequested = LCSharedUtils.launchToGuestApp(withClassicMode: classicMode)
+            guard launchRequested else {
+                throw "Failed to request LiveContainer launch"
+            }
         }
+        launchSucceeded = true
         
         // Record the launch time
         appInfo.lastLaunched = Date()
