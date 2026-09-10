@@ -96,15 +96,25 @@ static BOOL LCAppendSecurityScopedBookmark(NSMutableArray *bookmarks, NSURL *url
     }
     _extension.preferredLanguages = @[];
     
+    NSString *hostUrlScheme = NSUserDefaults.lcAppUrlScheme;
+    NSString *homePath = NSHomeDirectory();
+    if (_bundleId.length == 0 || _dataUUID.length == 0 ||
+        hostUrlScheme.length == 0 || homePath.length == 0) {
+        NSError *inputError = [NSError errorWithDomain:@"LiveContainer" code:29 userInfo:@{
+            NSLocalizedDescriptionKey: @"Multitask launch request is missing required identity or home path"
+        }];
+        [delegate appSceneVC:self didInitializeWithError:inputError];
+        return nil;
+    }
+
     NSExtensionItem *item = [NSExtensionItem new];
-    NSMutableArray* bookmarks = [NSMutableArray array];
-    NSMutableDictionary *userInfo = @{
-        @"hostUrlScheme": NSUserDefaults.lcAppUrlScheme,
-        @"selected": _bundleId,
-        @"selectedContainer": _dataUUID,
-        @"bookmarks": bookmarks,
-        @"lcHomePath": NSHomeDirectory(),
-    }.mutableCopy;
+    NSMutableArray *bookmarks = [NSMutableArray array];
+    NSMutableDictionary *userInfo = [NSMutableDictionary dictionary];
+    [userInfo setObject:hostUrlScheme forKey:@"hostUrlScheme"];
+    [userInfo setObject:_bundleId forKey:@"selected"];
+    [userInfo setObject:_dataUUID forKey:@"selectedContainer"];
+    [userInfo setObject:bookmarks forKey:@"bookmarks"];
+    [userInfo setObject:homePath forKey:@"lcHomePath"];
     
     NSString* launchAppUrlScheme = [NSUserDefaults.standardUserDefaults stringForKey:@"launchAppUrlScheme"];
     [NSUserDefaults.lcUserDefaults removeObjectForKey:@"launchAppUrlScheme"];
