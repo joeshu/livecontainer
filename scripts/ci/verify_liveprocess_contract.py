@@ -202,15 +202,14 @@ def main() -> None:
             "fileExistsAtPath:execPath",
             '"Executable not found:',
             '"Failed to back up executable:',
-            "replaceItemAtURL:executableURL",
-            "withItemAtURL:backupURL",
+            "rename(backupPath.fileSystemRepresentation",
             '"Failed to replace executable safely:',
         ],
         "executable replacement safety",
     )
     copy_index = executable_replacement_body.find("copyItemAtPath:execPath")
     remove_exec_index = executable_replacement_body.find("removeItemAtPath:execPath")
-    replace_index = executable_replacement_body.find("replaceItemAtURL:executableURL")
+    replace_index = executable_replacement_body.find("rename(backupPath.fileSystemRepresentation")
     if copy_index >= 0 and remove_exec_index >= 0 and (
         replace_index < 0 or copy_index < remove_exec_index < replace_index
     ):
