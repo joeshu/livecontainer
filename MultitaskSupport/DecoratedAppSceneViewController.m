@@ -19,16 +19,24 @@
 
 @implementation DecoratedAppSceneViewController
 - (instancetype)initWindowName:(NSString*)windowName bundleId:(NSString*)bundleId dataUUID:(NSString*)dataUUID rootVC:(UIViewController*)rootVC {
+    if (bundleId.length == 0 || dataUUID.length == 0 || rootVC == nil) {
+        return nil;
+    }
     self = [super initWithNibName:nil bundle:nil];
-    self.view = [[UIStackView alloc] initWithFrame:self.view.frame];
-    [MultitaskDockManager.shared.windowHostingView addSubview:self.view];
-    [rootVC addChildViewController:self];
-    
-    _dataUUID = dataUUID;
+    if (!self) {
+        return nil;
+    }
+    _dataUUID = [dataUUID copy];
     _scaleRatio = 1.0;
     _isMaximized = [NSUserDefaults.lcUserDefaults boolForKey:@"LCLaunchMultitaskMaximized"];
     _appSceneVC = [[AppSceneViewController alloc] initWithBundleId:bundleId dataUUID:dataUUID delegate:self];
-    self.title = windowName;
+    if (!_appSceneVC || !_appSceneVC.view) {
+        return nil;
+    }
+    self.view = [[UIStackView alloc] initWithFrame:CGRectZero];
+    [MultitaskDockManager.shared.windowHostingView addSubview:self.view];
+    [rootVC addChildViewController:self];
+    self.title = windowName ?: bundleId;
     [self setupDecoratedView];
     
     [MultitaskDockManager.shared addRunningApp:windowName appUUID:dataUUID view:self.view];
@@ -79,12 +87,18 @@
     UIBarButtonItem *closeButton = [[UIBarButtonItem alloc] initWithImage:closeImage style:UIBarButtonItemStylePlain target:self action:@selector(closeWindow)];
     closeButton.tintColor = [UIColor systemRedColor];
     
-    NSArray *barButtonItems = @[closeButton, self.maximizeButton, minimizeButton];
+    // Some SF Symbols are unavailable on older iOS versions. Never pass a
+    // nil UIBarButtonItem into UIKit's internal mutable array; UIKit throws
+    // __NSArrayM insertObject:atIndex: instead of ignoring it.
+    NSMutableArray<UIBarButtonItem *> *barButtonItems = [NSMutableArray arrayWithCapacity:3];
+    if (closeButton) [barButtonItems addObject:closeButton];
+    if (self.maximizeButton) [barButtonItems addObject:self.maximizeButton];
+    if (minimizeButton) [barButtonItems addObject:minimizeButton];
     if([NSUserDefaults.lcSharedDefaults boolForKey:@"LCMultitaskBottomWindowBar"]) {
         // resize handle overlaps the close button, so put the buttons on the left
-        self.navigationItem.leftBarButtonItems = barButtonItems;
+        self.navigationItem.leftBarButtonItems = barButtonItems.copy;
     } else {
-        self.navigationItem.rightBarButtonItems = barButtonItems;
+        self.navigationItem.rightBarButtonItems = barButtonItems.copy;
     }
 
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.1 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
@@ -114,7 +128,10 @@
     // Navigation bar
     UINavigationBar *navigationBar = [[UINavigationBar alloc] initWithFrame:CGRectMake(0, 0, self.view.frame.size.width, navBarHeight)];
     navigationBar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
-    UINavigationItem *navigationItem = [[UINavigationItem alloc] initWithTitle:self.title];
+    UINavigationItem *navigationItem = [[UINavigationItem alloc] initWithTitle:self.title ?: @""];
+    if (!navigationBar || !navigationItem) {
+        return;
+    }
     navigationBar.items = @[navigationItem];
     
     self.view.axis = UILayoutConstraintAxisVertical;
