@@ -200,11 +200,11 @@ def main() -> None:
         executable_replacement_body,
         [
             "fileExistsAtPath:execPath",
-            '"Executable not found:"',
-            '"Failed to back up executable:"',
+            '"Executable not found:',
+            '"Failed to back up executable:',
             "replaceItemAtURL:executableURL",
             "withItemAtURL:backupURL",
-            '"Failed to replace executable safely:"',
+            '"Failed to replace executable safely:',
         ],
         "executable replacement safety",
     )
