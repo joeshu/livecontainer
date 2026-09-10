@@ -235,12 +235,31 @@ int LCPatchExecSlice(const char *path, struct mach_header_64 *header, bool doInj
 }
 
 NSString *LCParseMachO(const char *path, bool readOnly, LCParseMachOCallback callback) {
-    int fd = open(path, readOnly ? O_RDONLY : O_RDWR, (mode_t)readOnly ? 0400 : 0600);
-    struct stat s;
-    fstat(fd, &s);
-    void *map = mmap(NULL, s.st_size, readOnly ? PROT_READ : (PROT_READ | PROT_WRITE), readOnly ? MAP_PRIVATE : MAP_SHARED, fd, 0);
+    int openFlags = readOnly ? O_RDONLY : O_RDWR;
+    int fd = open(path, openFlags, (mode_t)readOnly ? 0400 : 0600);
+    if (fd < 0) {
+        int errorCode = errno;
+        return [NSString stringWithFormat:@"Failed to open %s: %s (%d)", path, strerror(errorCode), errorCode];
+    }
+
+    struct stat fileStat = {0};
+    if (fstat(fd, &fileStat) != 0) {
+        int errorCode = errno;
+        close(fd);
+        return [NSString stringWithFormat:@"Failed to stat %s: %s (%d)", path, strerror(errorCode), errorCode];
+    }
+    if (fileStat.st_size <= 0) {
+        close(fd);
+        return [NSString stringWithFormat:@"Cannot map empty file %s", path];
+    }
+
+    int protection = readOnly ? PROT_READ : (PROT_READ | PROT_WRITE);
+    int mapFlags = readOnly ? MAP_PRIVATE : MAP_SHARED;
+    void *map = mmap(NULL, (size_t)fileStat.st_size, protection, mapFlags, fd, 0);
     if (map == MAP_FAILED) {
-        return [NSString stringWithFormat:@"Failed to map %s: %s", path, strerror(errno)];
+        int errorCode = errno;
+        close(fd);
+        return [NSString stringWithFormat:@"Failed to map %s: %s (%d)", path, strerror(errorCode), errorCode];
     }
 
     uint32_t magic = *(uint32_t *)map;
@@ -258,11 +277,13 @@ NSString *LCParseMachO(const char *path, bool readOnly, LCParseMachOCallback cal
     } else if (magic == MH_MAGIC_64 || magic == MH_MAGIC) {
         callback(path, (struct mach_header_64 *)map, fd, map);
     } else {
+        munmap(map, (size_t)fileStat.st_size);
+        close(fd);
         return @"Not a Mach-O file";
     }
 
-    msync(map, s.st_size, MS_SYNC);
-    munmap(map, s.st_size);
+    msync(map, (size_t)fileStat.st_size, MS_SYNC);
+    munmap(map, (size_t)fileStat.st_size);
     close(fd);
     return nil;
 }
