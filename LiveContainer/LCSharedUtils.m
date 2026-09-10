@@ -3,6 +3,7 @@
 #import "UIKitPrivate.h"
 #import "utils.h"
 @import MachO;
+@import Security;
 
 extern NSUserDefaults *lcUserDefaults;
 extern NSString *lcAppUrlScheme;
@@ -57,13 +58,23 @@ static void LCClearPendingLaunchKeys(NSUserDefaults *defaults) {
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
 #if !TARGET_OS_SIMULATOR
-        void* taskSelf = SecTaskCreateFromSelf(NULL);
+        SecTaskRef taskSelf = SecTaskCreateFromSelf(NULL);
         CFErrorRef error = NULL;
-        CFTypeRef cfans = SecTaskCopyValueForEntitlement(taskSelf, CFSTR("com.apple.developer.team-identifier"), &error);
-        if(CFGetTypeID(cfans) == CFStringGetTypeID()) {
-            ans = (__bridge NSString*)cfans;
+        CFTypeRef cfans = taskSelf
+            ? SecTaskCopyValueForEntitlement(taskSelf, CFSTR("com.apple.developer.team-identifier"), &error)
+            : NULL;
+        if(cfans && CFGetTypeID(cfans) == CFStringGetTypeID()) {
+            ans = [(__bridge NSString *)cfans copy];
         }
-        CFRelease(taskSelf);
+        if (cfans) {
+            CFRelease(cfans);
+        }
+        if (error) {
+            CFRelease(error);
+        }
+        if (taskSelf) {
+            CFRelease(taskSelf);
+        }
 #endif
         if(!ans) {
             // the above seems not to work if the device is jailbroken by Palera1n, so we use the public api one as backup
@@ -92,57 +103,88 @@ static void LCClearPendingLaunchKeys(NSUserDefaults *defaults) {
     return ans;
 }
 
+static BOOL LCIsKnownStoreAppGroup(NSString *candidate, NSString *teamIdentifier) {
+    if (![candidate isKindOfClass:NSString.class] || candidate.length == 0) {
+        return NO;
+    }
+    NSArray *bases = @[@"group.com.SideStore.SideStore", @"group.com.rileytestut.AltStore"];
+    for (NSString *base in bases) {
+        if ([candidate isEqualToString:base]) {
+            return YES;
+        }
+        if (teamIdentifier.length > 0 &&
+            [candidate isEqualToString:[base stringByAppendingFormat:@".%@", teamIdentifier]]) {
+            return YES;
+        }
+    }
+    return NO;
+}
+
+static NSArray<NSString *> *LCApplicationGroupEntitlements(void) {
+    CFErrorRef error = NULL;
+    SecTaskRef task = SecTaskCreateFromSelf(NULL);
+    if (!task) {
+        return @[];
+    }
+    CFTypeRef value = SecTaskCopyValueForEntitlement(task,
+                                                      CFSTR("com.apple.security.application-groups"),
+                                                      &error);
+    CFRelease(task);
+    if (error) {
+        CFRelease(error);
+    }
+    if (!value || CFGetTypeID(value) != CFArrayGetTypeID()) {
+        if (value) {
+            CFRelease(value);
+        }
+        return @[];
+    }
+    NSArray *groups = CFBridgingRelease(value);
+    NSMutableArray<NSString *> *valid = [NSMutableArray array];
+    for (id group in groups) {
+        if ([group isKindOfClass:NSString.class]) {
+            [valid addObject:group];
+        }
+    }
+    return valid;
+}
+
 + (NSString *)appGroupID {
     static dispatch_once_t once;
     static NSString *appGroupID = @"Unknown";
     dispatch_once(&once, ^{
-        NSArray* possibleAppGroups = @[
-            [@"group.com.SideStore.SideStore." stringByAppendingString:[self teamIdentifier]],
-            [@"group.com.rileytestut.AltStore." stringByAppendingString:[self teamIdentifier]]
-        ];
-        
-        // we prefer app groups with "Apps" in it, which indicate this app group is actually used by the store.
+        NSString *team = [self teamIdentifier];
+        NSArray<NSString *> *entitledGroups = LCApplicationGroupEntitlements();
+        NSMutableArray<NSString *> *possibleAppGroups = [NSMutableArray array];
+        for (NSString *group in entitledGroups) {
+            if (LCIsKnownStoreAppGroup(group, team) &&
+                [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:group]) {
+                [possibleAppGroups addObject:group];
+            }
+        }
+
+        // Prefer the store group that already owns the shared Apps directory.
         for (NSString *group in possibleAppGroups) {
             NSURL *path = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:group];
-            if(!path) {
-                continue;
-            }
             NSURL *bundlePath = [path URLByAppendingPathComponent:@"Apps"];
             if ([NSFileManager.defaultManager fileExistsAtPath:bundlePath.path]) {
-                // This will fail if LiveContainer is installed in both stores, but it should never be the case
                 appGroupID = group;
                 return;
             }
         }
-        
-        // if no "Apps" is found, we choose a valid group
-        for (NSString *group in possibleAppGroups) {
-            NSURL *path = [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:group];
-            if(!path) {
-                continue;
-            }
-            appGroupID = group;
+        if (possibleAppGroups.count > 0) {
+            appGroupID = possibleAppGroups.firstObject;
             return;
         }
-        
-        // if no possibleAppGroup is found, we detect app group from entitlement file
-        // Cache app group after importing cert so we don't have to analyze executable every launch
+
+        // A cached value is trusted only when it is both signed into this
+        // process and one of the known store group identifiers.
         NSString *cached = [lcUserDefaults objectForKey:@"LCAppGroupID"];
-        if (cached && [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:cached]) {
+        if (LCIsKnownStoreAppGroup(cached, team) &&
+            [entitledGroups containsObject:cached] &&
+            [NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:cached]) {
             appGroupID = cached;
             return;
-        }
-        CFErrorRef error = NULL;
-        void* taskSelf = SecTaskCreateFromSelf(NULL);
-        CFTypeRef value = SecTaskCopyValueForEntitlement(taskSelf, CFSTR("com.apple.security.application-groups"), &error);
-        CFRelease(taskSelf);
-        
-        if(!value) {
-            return;
-        }
-        NSArray* appGroups = (__bridge NSArray *)value;
-        if(appGroups.count > 0) {
-            appGroupID = [appGroups firstObject];
         }
     });
     return appGroupID;

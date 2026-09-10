@@ -26,9 +26,9 @@
 
 - [x] `bundle-name` 仅允许已注册 bundle，禁止 URL 直接成为路径（原生深链和 Bootstrap 均校验注册 Bundle）
 - [x] `container-folder-name` 仅允许目标 App 已注册容器（深链、Bootstrap 最终容器解析均校验 LCContainers）
-- [ ] App Group identifier 做安全组件与 entitlement 映射
-- [ ] 所有实际路径做 canonical containment
-- [ ] 外部 bookmark 失败禁止回退到内部同名容器
+- [x] App Group identifier 做安全组件与 entitlement 映射（仅接受当前签名 entitlement 中的已知 Store group）
+- [x] 所有实际路径做 canonical containment（清理和通用 URL 判断解析符号链接）
+- [x] 外部 bookmark 失败禁止回退到内部同名容器（模型、统计、清理均 fail-closed）
 
 ### Phase 2：P0 IPA 安装事务
 

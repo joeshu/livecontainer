@@ -83,6 +83,23 @@ def main() -> int:
     require(share_extension, '"LCLaunchExtensionPending"', "share atomic pending write")
     require(cleanup, '"LCPendingLaunch"', "ordinary pending cleanup")
     require(cleanup, '"LCLaunchExtensionPending"', "extension pending cleanup")
+
+    # Phase 1 path-boundary contracts.
+    container = read("LiveContainerSwiftUI/Models/LCContainer.swift")
+    storage = read("LiveContainerSwiftUI/Models/LCStorageManagementModel.swift")
+    swift_shared = read("LiveContainerSwiftUI/Utilities/Shared.swift")
+    require(shared, "@import Security", "Security entitlement API import")
+    require(shared, "LCApplicationGroupEntitlements", "signed App Group lookup")
+    require(shared, "LCIsKnownStoreAppGroup", "known App Group allowlist")
+    require(shared, "cfans && CFGetTypeID", "Team ID null guard")
+    require(container, "hasUsableStorage", "unusable bookmark state")
+    require(container, "Bookmark must resolve to an accessible directory", "bookmark directory guard")
+    require(container, "Do not fall back", "external bookmark no-fallback contract")
+    require(storage, "Unable to access external container", "storage scoped-access failure")
+    require(cleanup, "Unable to access external container", "cleanup scoped-access failure")
+    require(cleanup, "resolvingSymlinksInPath", "cleanup canonical containment")
+    require(swift_shared, "resolvingSymlinksInPath", "shared canonical containment")
+    forbid(swift_shared, '"group.com.SideStore.SideStore")', "hardcoded App Group fallback")
     payload = read("LiveProcess/main.m")
     for guard in ("realpath", "S_ISREG", "RTLD_LOCAL", "dlclose(handle)", "custom payload entry not found"):
         require(payload, guard, f"custom payload guard {guard}")

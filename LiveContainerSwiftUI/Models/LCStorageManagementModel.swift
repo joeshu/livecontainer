@@ -162,13 +162,28 @@ final class LCStorageManagementModel: ObservableObject {
 
         var containersSize: Int64 = 0
         for container in input.uiContainers {
-            if container.bookmarkResolved {
-                let _ = container.containerURL.startAccessingSecurityScopedResource()
+            guard container.hasUsableStorage else {
+                throw NSError(domain: "LiveContainer", code: 2,
+                              userInfo: [NSLocalizedDescriptionKey: "Container bookmark is unavailable"])
             }
-            
-            let size = try await calculateSize(at: container.containerURL)
-            
+            var accessed = false
             if container.bookmarkResolved {
+                accessed = container.containerURL.startAccessingSecurityScopedResource()
+                guard accessed else {
+                    throw NSError(domain: "LiveContainer", code: 3,
+                                  userInfo: [NSLocalizedDescriptionKey: "Unable to access external container"])
+                }
+            }
+            let size: Int64
+            do {
+                size = try await calculateSize(at: container.containerURL)
+            } catch {
+                if accessed {
+                    container.containerURL.stopAccessingSecurityScopedResource()
+                }
+                throw error
+            }
+            if accessed {
                 container.containerURL.stopAccessingSecurityScopedResource()
             }
             

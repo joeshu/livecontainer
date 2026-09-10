@@ -325,17 +325,12 @@ final class LCDataCleanupService {
         keepInfoPlist: Bool,
         report: inout LCCleanupReport
     ) -> Bool {
-        let url = container.containerURL.standardizedFileURL
-        guard fileManager.fileExists(atPath: url.path) else {
-            return true
-        }
-
-        let isExternal = container.storageBookMark != nil
-        if !isExternal && !isDescendant(url, of: LCPath.dataPath) && !isDescendant(url, of: LCPath.lcGroupDataPath) {
-            report.failures.append(LCDataCleanupError.unsafePath(url).localizedDescription)
+        guard container.hasUsableStorage else {
+            report.failures.append("Container bookmark is unavailable: \(container.name)")
             return false
         }
-
+        let isExternal = container.storageBookMark != nil
+        let url = container.containerURL.standardizedFileURL
         var accessed = false
         if isExternal {
             accessed = url.startAccessingSecurityScopedResource()
@@ -348,6 +343,14 @@ final class LCDataCleanupService {
             if accessed {
                 url.stopAccessingSecurityScopedResource()
             }
+        }
+        guard fileManager.fileExists(atPath: url.path) else {
+            return true
+        }
+
+        if !isExternal && !isDescendant(url, of: LCPath.dataPath) && !isDescendant(url, of: LCPath.lcGroupDataPath) {
+            report.failures.append(LCDataCleanupError.unsafePath(url).localizedDescription)
+            return false
         }
 
         do {
@@ -403,6 +406,10 @@ final class LCDataCleanupService {
         appInfo: LCAppInfo,
         report: inout LCCleanupReport
     ) {
+        guard container.hasUsableStorage else {
+            report.failures.append("Container bookmark is unavailable: \(container.name)")
+            return
+        }
         let containerURL = container.containerURL.standardizedFileURL
         let isExternal = container.storageBookMark != nil
         if !isExternal && !isSafeContainerURL(containerURL, appInfo: appInfo) {
@@ -413,6 +420,10 @@ final class LCDataCleanupService {
         var accessed = false
         if isExternal {
             accessed = containerURL.startAccessingSecurityScopedResource()
+            guard accessed else {
+                report.failures.append("Unable to access external container: \(containerURL.path)")
+                return
+            }
         }
         defer {
             if accessed {
@@ -579,9 +590,11 @@ final class LCDataCleanupService {
     }
 
     private func isDescendant(_ url: URL, of root: URL) -> Bool {
-        let child = url.standardizedFileURL.path
-        let parent = root.standardizedFileURL.path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
-        return child == "/\(parent)" || child.hasPrefix("/\(parent)/")
+        // Resolve symlinks before comparing paths; lexical prefixes are not a
+        // sufficient boundary for cleanup of attacker-controlled directories.
+        let child = url.resolvingSymlinksInPath().standardizedFileURL.path
+        let parent = root.resolvingSymlinksInPath().standardizedFileURL.path
+        return child == parent || child.hasPrefix(parent.hasSuffix("/") ? parent : parent + "/")
     }
 }
 

@@ -28,6 +28,10 @@ class LCContainer : ObservableObject, Hashable {
     }
     public var spoofedIdentifier: String?
     private var infoDict : [String:Any]?
+    public var hasUsableStorage: Bool {
+        storageBookMark == nil || resolvedContainerURL != nil
+    }
+
     public var containerURL : URL {
         if let resolvedContainerURL {
             return resolvedContainerURL
@@ -44,6 +48,7 @@ class LCContainer : ObservableObject, Hashable {
     }
     public var keychainGroupId : Int {
         get {
+            guard hasUsableStorage else { return -1 }
             if infoDict == nil {
                 infoDict = NSDictionary(contentsOf: infoDictUrl) as? [String : Any]
             }
@@ -56,6 +61,7 @@ class LCContainer : ObservableObject, Hashable {
     
     public var appIdentifier : String? {
         get {
+            guard hasUsableStorage else { return nil }
             if infoDict == nil {
                 infoDict = NSDictionary(contentsOf: infoDictUrl) as? [String : Any]
             }
@@ -88,21 +94,45 @@ class LCContainer : ObservableObject, Hashable {
                   resolvedContainerURL: nil
         )
         
+        var securityScopedURL: URL?
         if let bookmarkData {
-
-                do {
-                    var isStale = false
-                    let url = try URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale)
-
-                    self.resolvedContainerURL = url
-
-                } catch {
-                    print(error.localizedDescription)
+            do {
+                var isStale = false
+                let url = try URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale)
+                guard url.isFileURL, !url.path.isEmpty else {
+                    throw NSError(domain: "LiveContainer", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "Bookmark must resolve to a file URL"])
                 }
-
-                self.bookmarkResolved = true
+                guard url.startAccessingSecurityScopedResource() else {
+                    throw NSError(domain: "LiveContainer", code: 2,
+                                  userInfo: [NSLocalizedDescriptionKey: "Unable to access bookmark resource"])
+                }
+                // Keep the scoped access alive through LCContainerInfo.plist
+                // loading below; release it only after all external reads finish.
+                securityScopedURL = url
+                var isDirectory = ObjCBool(false)
+                guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
+                      isDirectory.boolValue else {
+                    throw NSError(domain: "LiveContainer", code: 1,
+                                  userInfo: [NSLocalizedDescriptionKey: "Bookmark must resolve to an accessible directory"])
+                }
+                self.resolvedContainerURL = url
+            } catch {
+                // Do not fall back to the private container with the same name.
+                // An external bookmark is the authority for this container.
+                if let securityScopedURL {
+                    securityScopedURL.stopAccessingSecurityScopedResource()
+                }
+                securityScopedURL = nil
+                self.resolvedContainerURL = nil
+            }
+            self.bookmarkResolved = true
         }
-        
+
+        guard bookmarkData == nil || self.resolvedContainerURL != nil else {
+            return
+        }
+
         do {
             let fm = FileManager.default
             if(!fm.fileExists(atPath: infoDictUrl.deletingLastPathComponent().path)) {
@@ -118,6 +148,9 @@ class LCContainer : ObservableObject, Hashable {
         } catch {
             
         }
+        if let securityScopedURL {
+            securityScopedURL.stopAccessingSecurityScopedResource()
+        }
     }
     
     func toDict() -> [String : Any] {
@@ -132,6 +165,9 @@ class LCContainer : ObservableObject, Hashable {
     }
     
     func makeLCContainerInfoPlist(appIdentifier : String, keychainGroupId : Int) {
+        guard hasUsableStorage else {
+            return
+        }
         infoDict = [
             "appIdentifier" : appIdentifier,
             "name" : name,
@@ -157,10 +193,17 @@ class LCContainer : ObservableObject, Hashable {
     }
     
     func reloadInfoPlist() {
+        guard hasUsableStorage else {
+            infoDict = nil
+            return
+        }
         infoDict = NSDictionary(contentsOf: infoDictUrl) as? [String : Any]
     }
 
     func loadName() {
+        guard hasUsableStorage else {
+            return
+        }
         reloadInfoPlist()
         guard let infoDict else {
             return

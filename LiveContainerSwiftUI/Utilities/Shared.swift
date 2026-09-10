@@ -26,10 +26,9 @@ struct LCPath {
         // it seems that Apple don't want to create one for us, so we just borrow our Store's
         if let appGroupPathUrl = LCSharedUtils.appGroupPath() {
             return appGroupPathUrl.appendingPathComponent("LiveContainer")
-        } else if let appGroupPathUrl =
-                    FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: "group.com.SideStore.SideStore") {
-            return appGroupPathUrl.appendingPathComponent("LiveContainer")
         } else {
+            // Never guess an App Group identifier. The Objective-C resolver
+            // already validates the current process entitlements.
             return docPath
         }
     }()
@@ -213,8 +212,10 @@ extension String: @retroactive LocalizedError {
 
 extension URL {
     func isDescendant(of root: URL) -> Bool {
-        let rootPath = root.standardizedFileURL.path
-        let path = standardizedFileURL.path
+        // Resolve symlinks before comparing components. Lexical prefix checks
+        // alone allow a child link to escape the intended storage root.
+        let rootPath = root.resolvingSymlinksInPath().standardizedFileURL.path
+        let path = resolvingSymlinksInPath().standardizedFileURL.path
         return path == rootPath || path.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
     }
 }

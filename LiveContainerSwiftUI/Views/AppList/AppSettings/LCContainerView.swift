@@ -74,7 +74,7 @@ struct LCContainerView : View {
                         saveContainer()
                     }
                     
-                    if let settingsBundle {
+                    if let settingsBundle, container.hasUsableStorage {
                         NavigationLink {
                             AppPreferenceView(bundleId: delegate.getBundleId(), settingsBundle: settingsBundle, containerURL: delegate.getContainerURL(container: container))
                         } label: {
