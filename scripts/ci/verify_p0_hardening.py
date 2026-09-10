@@ -57,6 +57,10 @@ def main() -> int:
     require(shared, "LCIsSafePathComponent", "native deep-link component guard")
     require(shared, "appBundle == nil", "bundle lookup failure guard")
     require(shared, "LCAppInfo.plist", "bundle metadata validation")
+    payload = read("LiveProcess/main.m")
+    for guard in ("realpath", "S_ISREG", "RTLD_LOCAL", "dlclose(handle)", "custom payload entry not found"):
+        require(payload, guard, f"custom payload guard {guard}")
+    forbid(payload, "NSCAssert(appInfo, @\"Failed to load custom payload", "wrong custom payload assertion")
     for guard in (
         "LCPathIsUnderRoot",
         "LCPathHasSymlinkComponent",

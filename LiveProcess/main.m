@@ -8,6 +8,9 @@
 #import <dlfcn.h>
 #import <UIKit/UIKit.h>
 #import <mach-o/dyld.h>
+#import <sys/stat.h>
+#import <limits.h>
+#import <string.h>
 #import "../LiveContainer/utils.h"
 #import "../LiveContainer/Tweaks/Tweaks.h"
 #import "../SideStoreSupport/XPCServer.h"
@@ -42,15 +45,44 @@ int LiveProcessMain(int argc, char *argv[]) {
     NSDictionary *appInfo = LiveProcessHandler.retrievedAppInfo;
     NSCAssert(appInfo, @"Failed to retrieve app info");
     
-    // Check if we received a request to execute a custom payload
-    NSString *customPayloadDylib = appInfo[@"customPayloadDylib"];
-    if(customPayloadDylib) {
-        void *handle = dlopen(customPayloadDylib.fileSystemRepresentation, RTLD_LAZY);
-        NSCAssert(appInfo, @"Failed to load custom payload dylib at path: %@", customPayloadDylib);
-        
-        NSString *customPayloadEntry = appInfo[@"customPayloadEntry"];
-        NSCAssert(customPayloadEntry, @"Missing customPayloadEntry");
+    // Check if we received a request to execute a custom payload. Payloads are
+    // trusted internal modules only; never accept an arbitrary path from IPC.
+    NSString *customPayloadDylib = [appInfo[@"customPayloadDylib"] isKindOfClass:NSString.class]
+        ? appInfo[@"customPayloadDylib"] : nil;
+    if(customPayloadDylib.length > 0) {
+        char resolvedPath[PATH_MAX];
+        const char *path = customPayloadDylib.fileSystemRepresentation;
+        struct stat st = {0};
+        if (path == NULL || realpath(path, resolvedPath) == NULL ||
+            lstat(path, &st) != 0 || !S_ISREG(st.st_mode) ||
+            strstr(resolvedPath, "/Tweaks/") == NULL) {
+            NSLog(@"[LiveProcess] rejected custom payload path: %@", customPayloadDylib);
+            return 1;
+        }
+        void *handle = dlopen(resolvedPath, RTLD_LAZY | RTLD_LOCAL);
+        if (handle == NULL) {
+            NSLog(@"[LiveProcess] failed to load custom payload %@: %s",
+                  customPayloadDylib, dlerror() ?: "unknown error");
+            return 1;
+        }
+        NSString *customPayloadEntry = [appInfo[@"customPayloadEntry"] isKindOfClass:NSString.class]
+            ? appInfo[@"customPayloadEntry"] : nil;
+        if (customPayloadEntry.length == 0 ||
+            [customPayloadEntry rangeOfCharacterFromSet:
+                [NSCharacterSet characterSetWithCharactersInString:@"/\\\\"]].location != NSNotFound) {
+            NSLog(@"[LiveProcess] rejected custom payload entry");
+            dlclose(handle);
+            return 1;
+        }
+        dlerror();
         int (*payloadEntry)(int, char **, char **, char **) = dlsym(handle, customPayloadEntry.UTF8String);
+        const char *symbolError = dlerror();
+        if (payloadEntry == NULL || symbolError != NULL) {
+            NSLog(@"[LiveProcess] custom payload entry not found: %s",
+                  symbolError ?: "unknown error");
+            dlclose(handle);
+            return 1;
+        }
         return payloadEntry(argc, argv, _envp, _apple);
     }
     
