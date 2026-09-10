@@ -151,7 +151,10 @@ struct LaunchAppExtension: AppIntent {
         if !LaunchAppExtension.bookmarkResolved, let bookmarkData = lcSharedDefaults.data(forKey: "LCLaunchExtensionPrivateDocBookmark") {
             var isStale = false
             do {
-                let url = try URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale)
+                let url = try URL(resolvingBookmarkData: bookmarkData,
+                                  options: [.withSecurityScope],
+                                  relativeTo: nil,
+                                  bookmarkDataIsStale: &isStale)
                 let access = url.startAccessingSecurityScopedResource()
                 if access {
                     setenv("LC_HOME_PATH", (url.deletingLastPathComponent().path as NSString).utf8String, 1)

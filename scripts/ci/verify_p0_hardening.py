@@ -34,6 +34,12 @@ def main() -> int:
     share_extension = read("ShareExtension/ShareExtensionViewModel.swift")
     cleanup = read("LiveContainerSwiftUI/Utilities/LCDataCleanupService.swift")
     tweak_loader = read("TweakLoader/TweakLoader.m")
+    bootstrap_source = read("LiveContainer/LCBootstrap.m")
+    live_process = read("LiveProcess/main.m")
+    launch_bookmark_source = read("LaunchAppExtension/LaunchAppExtension.swift")
+    share_bookmark_source = read("ShareExtension/ShareExtensionViewModel.swift")
+    ipa_bookmark_source = read("LiveContainerSwiftUI/Views/AppList/LCAppListView.swift")
+    tweak_bookmark_source = read("TweakLoader/UIKit+GuestHooks.m")
 
     for flag in (
         "ARCHIVE_EXTRACT_SECURE_NODOTDOT",
@@ -100,6 +106,17 @@ def main() -> int:
     require(cleanup, "resolvingSymlinksInPath", "cleanup canonical containment")
     require(swift_shared, "resolvingSymlinksInPath", "shared canonical containment")
     forbid(swift_shared, '"group.com.SideStore.SideStore")', "hardcoded App Group fallback")
+    for source, label in (
+        (container, "container bookmark"),
+        (bootstrap_source, "bootstrap bookmark"),
+        (live_process, "live process bookmark"),
+        (launch_bookmark_source, "launch extension bookmark"),
+        (share_bookmark_source, "share extension bookmark"),
+        (ipa_bookmark_source, "IPA bookmark"),
+        (tweak_bookmark_source, "tweak bookmark"),
+    ):
+        if "resolvingBookmarkData" in source or "URLByResolvingBookmarkData" in source:
+            require(source, "withSecurityScope" if "resolvingBookmarkData" in source else "NSURLBookmarkResolutionWithSecurityScope", f"{label} security scope option")
     payload = read("LiveProcess/main.m")
     for guard in ("realpath", "S_ISREG", "RTLD_LOCAL", "dlclose(handle)", "custom payload entry not found"):
         require(payload, guard, f"custom payload guard {guard}")

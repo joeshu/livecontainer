@@ -98,7 +98,10 @@ class LCContainer : ObservableObject, Hashable {
         if let bookmarkData {
             do {
                 var isStale = false
-                let url = try URL(resolvingBookmarkData: bookmarkData, bookmarkDataIsStale: &isStale)
+                let url = try URL(resolvingBookmarkData: bookmarkData,
+                                  options: [.withSecurityScope],
+                                  relativeTo: nil,
+                                  bookmarkDataIsStale: &isStale)
                 guard url.isFileURL, !url.path.isEmpty else {
                     throw NSError(domain: "LiveContainer", code: 1,
                                   userInfo: [NSLocalizedDescriptionKey: "Bookmark must resolve to a file URL"])

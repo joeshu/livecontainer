@@ -1001,7 +1001,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                     var isStale = false
                     let resolvedURL = try URL(
                         resolvingBookmarkData: bookmarkData,
-                        options: URL.BookmarkResolutionOptions(rawValue: 1 << 10),
+                        options: [.withSecurityScope],
                         relativeTo: nil,
                         bookmarkDataIsStale: &isStale
                     )
