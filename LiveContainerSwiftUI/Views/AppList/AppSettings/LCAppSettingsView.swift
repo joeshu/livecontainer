@@ -629,8 +629,10 @@ struct LCAppSettingsView: View {
 
             var updatedContainers = model.uiContainers
             updatedContainers.append(container)
-            guard appInfo.replaceContainerInfo(updatedContainers.map { $0.toDict() }, error: nil) else {
-                throw NSError(domain: "LiveContainer", code: 42,
+            appInfo.containerInfo = updatedContainers.map { $0.toDict() }
+            var saveError: NSError?
+            guard appInfo.save(&saveError) else {
+                throw saveError ?? NSError(domain: "LiveContainer", code: 42,
                               userInfo: [NSLocalizedDescriptionKey: "Unable to persist container registry"])
             }
             model.uiContainers = updatedContainers

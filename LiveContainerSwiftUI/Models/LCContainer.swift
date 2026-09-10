@@ -169,8 +169,9 @@ class LCContainer : ObservableObject, Hashable {
                           userInfo: [NSLocalizedDescriptionKey: "Container registration not found"])
         }
         records[index]["bookmarkData"] = renewedBookmark
+        appInfo.containerInfo = records
         var saveError: NSError?
-        guard appInfo.replaceContainerInfo(records, error: &saveError) else {
+        guard appInfo.save(&saveError) else {
             throw saveError ?? NSError(domain: "LiveContainer", code: 8,
                                        userInfo: [NSLocalizedDescriptionKey: "Unable to persist renewed container bookmark"])
         }
@@ -284,7 +285,7 @@ class LCContainer : ObservableObject, Hashable {
             isolateAppGroup = plistInfo["isolateAppGroup"] as? Bool ?? false
             spoofIdentifierForVendor = plistInfo["spoofIdentifierForVendor"] as? Bool ?? false
             spoofedIdentifier = plistInfo["spoofedIdentifierForVendor"] as? String
-            infoDict = plistInfo
+            self.infoDict = plistInfo
         }
         if let securityScopedURL {
             securityScopedURL.stopAccessingSecurityScopedResource()
