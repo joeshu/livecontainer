@@ -19,6 +19,7 @@ SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Utilities/LCUtils.m"
 LIVE_PROCESS_SOURCE_PATH = ROOT / "LiveProcess/main.m"
 SIDESTORE_REFRESH_SOURCE_PATH = ROOT / "SideStoreSupport/SideStore.swift"
 APP_INFO_SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Models/LCAppInfo.m"
+MACHO_SOURCE_PATH = ROOT / "LiveContainer/LCMachOUtils.m"
 APP_LIST_SOURCE_PATH = ROOT / "LiveContainerSwiftUI/Views/AppList/LCAppListView.swift"
 
 
@@ -97,6 +98,8 @@ def main() -> None:
         fail(f"missing source: {SIDESTORE_REFRESH_SOURCE_PATH.relative_to(ROOT)}")
     if not APP_INFO_SOURCE_PATH.is_file():
         fail(f"missing source: {APP_INFO_SOURCE_PATH.relative_to(ROOT)}")
+    if not MACHO_SOURCE_PATH.is_file():
+        fail(f"missing source: {MACHO_SOURCE_PATH.relative_to(ROOT)}")
     if not APP_LIST_SOURCE_PATH.is_file():
         fail(f"missing source: {APP_LIST_SOURCE_PATH.relative_to(ROOT)}")
 
@@ -104,6 +107,7 @@ def main() -> None:
     live_process_source = LIVE_PROCESS_SOURCE_PATH.read_text(encoding="utf-8")
     sidestore_refresh_source = SIDESTORE_REFRESH_SOURCE_PATH.read_text(encoding="utf-8")
     app_info_source = APP_INFO_SOURCE_PATH.read_text(encoding="utf-8")
+    macho_source = MACHO_SOURCE_PATH.read_text(encoding="utf-8")
     app_list_source = APP_LIST_SOURCE_PATH.read_text(encoding="utf-8")
     clear_body = extract_function(
         source, "static void LCClearPendingGuestLaunchState(void)"
@@ -166,6 +170,51 @@ def main() -> None:
         ],
         "LiveProcess launch path",
     )
+
+    macho_body = extract_function(
+        macho_source,
+        "NSString *LCParseMachO(const char *path, bool readOnly, LCParseMachOCallback callback)",
+    )
+    require_all(
+        macho_body,
+        [
+            "if (fd < 0)",
+            '"Failed to open %s"',
+            "if (fstat(fd, &fileStat) != 0)",
+            '"Failed to stat %s"',
+            "fileStat.st_size <= 0",
+            "if (map == MAP_FAILED)",
+            "munmap(map",
+            "close(fd);",
+        ],
+        "Mach-O mapping diagnostics",
+    )
+    if "fstat(fd, &s)" in macho_body:
+        fail("LCParseMachO must not ignore fstat failures")
+
+    executable_replacement_body = extract_function(
+        app_info_source,
+        "- (void)patchExecAndSignIfNeedWithCompletionHandler:",
+    )
+    require_all(
+        executable_replacement_body,
+        [
+            "fileExistsAtPath:execPath",
+            '"Executable not found:"',
+            '"Failed to back up executable:"',
+            "replaceItemAtURL:executableURL",
+            "withItemAtURL:backupURL",
+            '"Failed to replace executable safely:"',
+        ],
+        "executable replacement safety",
+    )
+    copy_index = executable_replacement_body.find("copyItemAtPath:execPath")
+    remove_exec_index = executable_replacement_body.find("removeItemAtPath:execPath")
+    replace_index = executable_replacement_body.find("replaceItemAtURL:executableURL")
+    if copy_index >= 0 and remove_exec_index >= 0 and (
+        replace_index < 0 or copy_index < remove_exec_index < replace_index
+    ):
+        fail("executable replacement must not delete the original before an atomic replacement")
 
     selected_read = launch_body.find('stringForKey:@"selected"')
     container_read = launch_body.find('stringForKey:@"selectedContainer"')
@@ -237,6 +286,7 @@ def main() -> None:
     result = {
         "source": str(SOURCE_PATH.relative_to(ROOT)),
         "live_process_source": str(LIVE_PROCESS_SOURCE_PATH.relative_to(ROOT)),
+        "macho_source": str(MACHO_SOURCE_PATH.relative_to(ROOT)),
         "sidestore_refresh_source": str(SIDESTORE_REFRESH_SOURCE_PATH.relative_to(ROOT)),
         "app_info_source": str(APP_INFO_SOURCE_PATH.relative_to(ROOT)),
         "app_list_source": str(APP_LIST_SOURCE_PATH.relative_to(ROOT)),
@@ -268,6 +318,19 @@ def main() -> None:
             "empty-file-selection",
             "no-force-cast-url-schemes",
             "optional-sign-progress",
+        ],
+        "macho_checks": [
+            "open-failure-diagnostic",
+            "fstat-failure-diagnostic",
+            "empty-file-guard",
+            "mmap-failure-diagnostic",
+            "descriptor-and-mapping-cleanup",
+        ],
+        "executable_replacement_checks": [
+            "source-executable-exists",
+            "backup-error-propagation",
+            "atomic-replacement",
+            "no-delete-before-replace",
         ],
         "bridge_checks": [
             "checked-continuations",
