@@ -238,7 +238,7 @@ jobs:
       # Formal releases are versioned and created only by an explicit release commit.
       # Ordinary main pushes update the rolling nightly release only.
       - name: Publish formal release 1.3 once
-        if: startsWith(github.event.head_commit.message, 'Normalize release labels: publish LiveContainer 1.3')
+        if: startsWith(github.event.head_commit.message, 'Normalize release labels publish LiveContainer 1.3')
         uses: softprops/action-gh-release@v3
         with:
           name: "LiveContainer 1.3"
