@@ -151,8 +151,12 @@ struct LaunchAppExtension: AppIntent {
         if !LaunchAppExtension.bookmarkResolved, let bookmarkData = lcSharedDefaults.data(forKey: "LCLaunchExtensionPrivateDocBookmark") {
             var isStale = false
             do {
+                // Foundation exposes the security-scope bit through the
+                // Objective-C API on iOS, while Swift's named option is
+                // unavailable to the iOS target in Xcode 26.2.
+                let resolutionOptions = URL.BookmarkResolutionOptions(rawValue: 1 << 10)
                 let url = try URL(resolvingBookmarkData: bookmarkData,
-                                  options: [.withSecurityScope],
+                                  options: resolutionOptions,
                                   relativeTo: nil,
                                   bookmarkDataIsStale: &isStale)
                 let access = url.startAccessingSecurityScopedResource()
