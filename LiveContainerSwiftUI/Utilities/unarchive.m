@@ -196,12 +196,17 @@ int extract(NSString *fileToExtract, NSString *extractionPath, NSProgress *progr
         LCCloseArchives(reader, NULL);
         return ARCHIVE_FATAL;
     }
+    // Entry names are validated before being converted into absolute paths under
+    // this operation-owned root. NOABSOLUTEPATHS cannot be used here because it
+    // would reject the safe absolute destination we intentionally provide.
     int flags = ARCHIVE_EXTRACT_SECURE_NODOTDOT |
-                ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS |
                 ARCHIVE_EXTRACT_SECURE_SYMLINKS |
                 ARCHIVE_EXTRACT_SAFE_WRITES;
-    archive_write_disk_set_options(writer, flags);
-    archive_write_disk_set_standard_lookup(writer);
+    if (archive_write_disk_set_options(writer, flags) != ARCHIVE_OK ||
+        archive_write_disk_set_standard_lookup(writer) != ARCHIVE_OK) {
+        LCCloseArchives(reader, writer);
+        return ARCHIVE_FATAL;
+    }
 
     NSString *rootPath = extractionPath.stringByStandardizingPath;
     NSString *rootPrefix = [rootPath stringByAppendingString:@"/"];

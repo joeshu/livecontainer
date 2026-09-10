@@ -31,7 +31,6 @@ def main() -> int:
 
     for flag in (
         "ARCHIVE_EXTRACT_SECURE_NODOTDOT",
-        "ARCHIVE_EXTRACT_SECURE_NOABSOLUTEPATHS",
         "ARCHIVE_EXTRACT_SECURE_SYMLINKS",
         "ARCHIVE_EXTRACT_SAFE_WRITES",
     ):
