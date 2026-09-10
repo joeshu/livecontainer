@@ -13,6 +13,18 @@ NSString* FBSOpenApplicationOptionKeyPayloadURL = @"__PayloadURL";
 
 @implementation LCSharedUtils
 
+static BOOL LCIsSafePathComponent(NSString *value) {
+    if (![value isKindOfClass:NSString.class] || value.length == 0 || value.length > 255) {
+        return NO;
+    }
+    if ([value isEqualToString:@"."] || [value isEqualToString:@".."] ||
+        [value containsString:@"/"] || [value containsString:@"\\"] ||
+        [value rangeOfCharacterFromSet:[NSCharacterSet controlCharacterSet]].location != NSNotFound) {
+        return NO;
+    }
+    return YES;
+}
+
 + (NSString*) teamIdentifier {
     static NSString* ans = nil;
     static dispatch_once_t onceToken;
@@ -186,18 +198,26 @@ NSString* FBSOpenApplicationOptionKeyPayloadURL = @"__PayloadURL";
             containerFolderName = queryItem.value;
         }
     }
-    if(launchBundleId) {
+    if(launchBundleId && LCIsSafePathComponent(launchBundleId) &&
+       (containerFolderName == nil || LCIsSafePathComponent(containerFolderName))) {
+        bool isSharedApp = false;
+        NSBundle *appBundle = [self findBundleWithBundleId:launchBundleId isSharedAppOut:&isSharedApp];
+        if (appBundle == nil) {
+            return NO;
+        }
+        NSDictionary *appInfo = [NSDictionary dictionaryWithContentsOfFile:
+            [appBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]];
+        if (![appInfo isKindOfClass:NSDictionary.class]) {
+            return NO;
+        }
+
+        // Commit the pending launch only after the registered bundle and its
+        // metadata have been validated.
         if (openUrl) {
             [lcUserDefaults setObject:openUrl forKey:@"launchAppUrlScheme"];
         }
-        
-        // Attempt to restart LiveContainer with the selected guest app
         [lcUserDefaults setObject:launchBundleId forKey:@"selected"];
         [lcUserDefaults setObject:containerFolderName forKey:@"selectedContainer"];
-        bool isSharedApp = false;
-        NSBundle *appBundle = [self findBundleWithBundleId:launchBundleId isSharedAppOut:&isSharedApp];
-        NSDictionary *appInfo = [NSDictionary dictionaryWithContentsOfFile:
-            [appBundle.bundlePath stringByAppendingPathComponent:@"LCAppInfo.plist"]];
         NSUInteger classicMode = [appInfo[@"classicMode"] boolValue]
             ? [appInfo[@"LCClassicModeCache"][@"defaultClassicMode"] unsignedIntegerValue]
             : 0;

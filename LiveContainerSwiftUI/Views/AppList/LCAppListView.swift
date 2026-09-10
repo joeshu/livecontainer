@@ -310,7 +310,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             }
             Button("lc.appList.installMode.container".loc) {
                 guard let url = consumePendingIPAURL() else { return }
-                Task { await startInstallApp(url) }
+                Task { await startInstallApp(url, ownsInput: true) }
             }
             Button("lc.common.cancel".loc, role: .cancel) { discardPendingIPAURL() }
         } message: {
@@ -587,15 +587,19 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
 
 
     
-    func startInstallApp(_ fileUrl:URL) async {
+    func startInstallApp(_ fileUrl:URL, ownsInput: Bool = false) async {
+        self.installprogressVisible = true
+        defer {
+            self.installprogressVisible = false
+            if ownsInput {
+                try? FileManager.default.removeItem(at: fileUrl)
+            }
+        }
         do {
-            self.installprogressVisible = true
             try await installIpaFile(fileUrl)
-            try FileManager.default.removeItem(at: fileUrl)
         } catch {
             errorInfo = error.localizedDescription
             errorShow = true
-            self.installprogressVisible = false
         }
     }
 
@@ -608,7 +612,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
                 choosingInstallMode = true
             } else {
                 pendingIPAURL = nil
-                Task { await startInstallApp(stagedURL) }
+                Task { await startInstallApp(stagedURL, ownsInput: true) }
             }
         } catch {
             errorInfo = error.localizedDescription
@@ -653,6 +657,11 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
     
     func installIpaFile(_ url:URL) async throws {
         let fm = FileManager()
+        let installRoot = fm.temporaryDirectory
+            .appendingPathComponent("LiveContainerInstall", isDirectory: true)
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: installRoot, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: installRoot) }
         
         let installProgress = Progress.discreteProgress(totalUnitCount: 100)
         self.installProgressPercentage = 0.0
@@ -663,13 +672,11 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
         let decompressProgress = Progress.discreteProgress(totalUnitCount: 100)
         installProgress.addChild(decompressProgress, withPendingUnitCount: 80)
-        let payloadPath = fm.temporaryDirectory.appendingPathComponent("Payload")
-        if fm.fileExists(atPath: payloadPath.path) {
-            try fm.removeItem(at: payloadPath)
-        }
+        let payloadPath = installRoot.appendingPathComponent("Payload", isDirectory: true)
         
-        // decompress
-        guard await decompress(url.path, fm.temporaryDirectory.path, decompressProgress) == 0 else {
+        // Decompress into an operation-owned staging directory. Never reuse or
+        // clear the process-wide temporary directory.
+        guard await decompress(url.path, installRoot.path, decompressProgress) == 0 else {
             throw "lc.appList.urlFileIsNotIpaError".loc
         }
 
@@ -687,20 +694,22 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
 
         let appFolderPath = payloadPath.appendingPathComponent(appBundleName)
         
-        guard let newAppInfo = LCAppInfo(bundlePath: appFolderPath.path) else {
+        guard let newAppInfo = LCAppInfo(bundlePath: appFolderPath.path),
+              let bundleIdentifier = newAppInfo.bundleIdentifier(),
+              bundleIdentifier.isValidBundleIdentifier() else {
             throw "lc.appList.infoPlistCannotReadError".loc
         }
 
-        var appRelativePath = "\(newAppInfo.bundleIdentifier()!.sanitizeNonACSII()).app"
+        var appRelativePath = "\(bundleIdentifier).app"
         var outputFolder = LCPath.bundlePath.appendingPathComponent(appRelativePath)
         var appToReplace : LCAppModel? = nil
         // Folder exist! show alert for user to choose which bundle to replace
         var sameBundleIdApp = sharedModel.apps.filter { app in
-            return app.appInfo.bundleIdentifier()! == newAppInfo.bundleIdentifier()
+            return app.appInfo.bundleIdentifier() == bundleIdentifier
         }
         if sameBundleIdApp.count == 0 {
             sameBundleIdApp = sharedModel.hiddenApps.filter { app in
-                return app.appInfo.bundleIdentifier()! == newAppInfo.bundleIdentifier()
+                return app.appInfo.bundleIdentifier() == bundleIdentifier
             }
             
             // we found a hidden app, we need to authenticate before proceeding
@@ -721,7 +730,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
         
         if fm.fileExists(atPath: outputFolder.path) || sameBundleIdApp.count > 0 {
-            appRelativePath = "\(newAppInfo.bundleIdentifier()!)_\(Int(CFAbsoluteTimeGetCurrent())).app"
+            appRelativePath = "\(bundleIdentifier)_\(Int(CFAbsoluteTimeGetCurrent())).app"
             
             self.installOptions = [AppReplaceOption(isReplace: false, nameOfFolderToInstall: appRelativePath)]
             
@@ -741,51 +750,76 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             } else {
                 outputFolder = LCPath.bundlePath.appendingPathComponent(installOptionChosen.nameOfFolderToInstall)
             }
+            guard installOptionChosen.nameOfFolderToInstall.isSafePathComponent() else {
+                throw "Invalid application folder name"
+            }
             appRelativePath = installOptionChosen.nameOfFolderToInstall
             appToReplace = installOptionChosen.appToReplace
-            if installOptionChosen.isReplace {
-                try fm.removeItem(at: outputFolder)
-            }
         }
-        // Move it!
-        try fm.moveItem(at: appFolderPath, to: outputFolder)
-        let finalNewApp = LCAppInfo(bundlePath: outputFolder.path)
-        finalNewApp?.relativeBundlePath = appRelativePath
-        
-        guard let finalNewApp else {
-            errorInfo = "lc.appList.appInfoInitError".loc
-            errorShow = true
-            return
+
+        // Prepare the replacement completely inside operation-owned staging. The
+        // live bundle is not touched until patching and signing have succeeded.
+        let preparedAppPath = installRoot.appendingPathComponent("Prepared.app", isDirectory: true)
+        try fm.copyItem(at: appFolderPath, to: preparedAppPath)
+        guard let preparedApp = LCAppInfo(bundlePath: preparedAppPath.path) else {
+            throw "lc.appList.appInfoInitError".loc
         }
-        
-        // patch and sign it
-        var signError : String? = nil
+        preparedApp.relativeBundlePath = appRelativePath
+
+        var signError: String? = nil
         var signSuccess = false
-        await withUnsafeContinuation({ c in
+        await withUnsafeContinuation { continuation in
             if appToReplace?.uiDontSign ?? false || LCUtils.appGroupUserDefault.bool(forKey: "LCDontSignApp") {
-                finalNewApp.dontSign = true
+                preparedApp.dontSign = true
             }
-            finalNewApp.patchExecAndSignIfNeed(completionHandler: { success, error in
+            preparedApp.patchExecAndSignIfNeed(completionHandler: { success, error in
                 signError = error
                 signSuccess = success
-                c.resume()
+                continuation.resume()
             }, progressHandler: { signProgress in
                 if let signProgress {
                     installProgress.addChild(signProgress, withPendingUnitCount: 20)
                 }
             }, forceSign: false)
-        })
-        
-        // we leave it unsigned even if signing failed
+        }
+        if !signSuccess {
+            throw signError ?? "Application signing failed"
+        }
         if let signError {
-            if signSuccess {
-                errorInfo = "\("lc.appList.signSuccessWithError".loc)\n\n\(signError)"
-            } else {
-                errorInfo = signError.loc
-            }
+            errorInfo = "\("lc.appList.signSuccessWithError".loc)\n\n\(signError)"
             errorShow = true
         }
-        
+
+        var backupFolder: URL? = nil
+        func rollbackInstall() {
+            if fm.fileExists(atPath: outputFolder.path) {
+                try? fm.removeItem(at: outputFolder)
+            }
+            if let backupFolder, fm.fileExists(atPath: backupFolder.path),
+               !fm.fileExists(atPath: outputFolder.path) {
+                try? fm.moveItem(at: backupFolder, to: outputFolder)
+            }
+        }
+        do {
+            if appToReplace != nil {
+                let backup = outputFolder.deletingLastPathComponent()
+                    .appendingPathComponent(".lc-backup-\(UUID().uuidString)", isDirectory: true)
+                try fm.moveItem(at: outputFolder, to: backup)
+                backupFolder = backup
+            } else if fm.fileExists(atPath: outputFolder.path) {
+                throw "Application destination already exists"
+            }
+            try fm.moveItem(at: preparedAppPath, to: outputFolder)
+        } catch {
+            rollbackInstall()
+            throw error
+        }
+        guard let finalNewApp = LCAppInfo(bundlePath: outputFolder.path) else {
+            rollbackInstall()
+            throw "lc.appList.appInfoInitError".loc
+        }
+        finalNewApp.relativeBundlePath = appRelativePath
+
         if let appToReplace {
             // copy previous configration to new app
             finalNewApp.autoSaveDisabled = true
@@ -817,6 +851,11 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             finalNewApp.spoofSDKVersion = true
         }
         finalNewApp.installationDate = Date.now
+        // The old bundle is no longer needed once the new metadata is committed.
+        // If this cleanup fails, retaining the backup is safer than deleting it.
+        if let backupFolder, fm.fileExists(atPath: backupFolder.path) {
+            try? fm.removeItem(at: backupFolder)
+        }
         
         DispatchQueue.main.async {
             if let appToReplace {

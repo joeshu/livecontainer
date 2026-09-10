@@ -186,6 +186,37 @@ extension String: @retroactive LocalizedError {
     func sanitizeNonACSII() -> String  {
         filter { $0.isASCII }
     }
+
+    /// Returns true only for a single filesystem component. This is used for
+    /// values that may later participate in a path; it is deliberately not a
+    /// general-purpose filename sanitizer.
+    func isSafePathComponent(maxLength: Int = 255) -> Bool {
+        guard !isEmpty, count <= maxLength,
+              self != ".", self != "..",
+              !contains("/"), !contains("\\") else { return false }
+        return !unicodeScalars.contains { CharacterSet.controlCharacters.contains($0) }
+    }
+
+    func isValidBundleIdentifier() -> Bool {
+        guard isSafePathComponent(maxLength: 255),
+              !contains(" "), !contains("_") else { return false }
+        return split(separator: ".").allSatisfy { component in
+            !component.isEmpty && component.unicodeScalars.allSatisfy {
+                ($0.value >= 48 && $0.value <= 57) ||
+                ($0.value >= 65 && $0.value <= 90) ||
+                ($0.value >= 97 && $0.value <= 122) ||
+                $0.value == 45
+            }
+        }
+    }
+}
+
+extension URL {
+    func isDescendant(of root: URL) -> Bool {
+        let rootPath = root.standardizedFileURL.path
+        let path = standardizedFileURL.path
+        return path == rootPath || path.hasPrefix(rootPath.hasSuffix("/") ? rootPath : rootPath + "/")
+    }
 }
 
 extension UTType {

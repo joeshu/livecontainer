@@ -669,7 +669,14 @@ int LiveContainerMain(int argc, char *argv[]) {
     lcAppUrlScheme = NSBundle.mainBundle.infoDictionary[@"CFBundleURLTypes"][0][@"CFBundleURLSchemes"][0];
     lcAppGroupPath = [[NSFileManager.defaultManager containerURLForSecurityApplicationGroupIdentifier:[NSClassFromString(@"LCSharedUtils") appGroupID]] path];
     isLiveProcess = [lcAppUrlScheme isEqualToString:@"liveprocess"];
-    setenv("LC_HOME_PATH", getenv("HOME"), 0);
+    const char *currentHome = getenv("HOME");
+    if (currentHome == NULL || currentHome[0] == '\0') {
+        NSLog(@"[LiveContainer] HOME is unavailable; refusing to initialize guest context");
+        return 1;
+    }
+    // Do not inherit a previous guest's path when a LiveProcess or extension
+    // is reused. The current process HOME is the source of truth for bootstrap.
+    setenv("LC_HOME_PATH", currentHome, 1);
 
     NSString *selectedApp = [lcUserDefaults stringForKey:@"selected"];
     NSString *selectedContainer = [lcUserDefaults stringForKey:@"selectedContainer"];
