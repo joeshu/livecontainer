@@ -220,24 +220,33 @@ static NSArray<NSString *> *LCApplicationGroupEntitlements(void) {
         });
     };
 
-    // LiveContainer and the embedded SideStore are the same host application.
-    // Re-opening the host through its control URL is the handoff path used by
-    // older working builds; opening our own bundle via LSApplicationWorkspace
-    // can report success and still leave the replacement scene unactivated.
-    if (classicMode == 0 && lcAppUrlScheme.length > 0) {
-        UIApplication *application = [NSClassFromString(@"UIApplication") sharedApplication];
-        NSURL *launchURL = [NSURL URLWithString:[NSString stringWithFormat:@"%@://livecontainer-relaunch", lcAppUrlScheme]];
-        if ([application canOpenURL:launchURL]) {
-            [application openURL:launchURL options:@{} completionHandler:^(BOOL success) {
-                NSLog(@"[LiveContainer] relaunch URL success=%d", success);
-                if (success) {
-                    terminateAfterSuccessfulLaunch();
-                }
-            }];
-            return YES;
+    // The relaunch URL is registered by this same process and is consumed by
+    // our URL hook, so UIApplication openURL:self cannot create a replacement
+    // process. Use SpringBoard as an external activation trampoline, then ask
+    // LaunchServices to activate the host. Keep the two requests serialized.
+    if (classicMode == 0) {
+        LSApplicationWorkspace *workspace = [PrivClass(LSApplicationWorkspace) defaultWorkspace];
+        NSString *mainBundleIdentifier = NSUserDefaults.lcMainBundle.bundleIdentifier;
+        if (!workspace || mainBundleIdentifier.length == 0) {
+            return NO;
         }
-        NSLog(@"[LiveContainer] relaunch URL cannot be opened: %@", launchURL);
-        return NO;
+        [workspace openApplicationWithBundleIdentifier:@"com.apple.springboard"
+                                           configuration:nil
+                                       completionHandler:^(BOOL springBoardSuccess, NSError *springBoardError) {
+            NSLog(@"[LiveContainer] SpringBoard handoff success=%d error=%@", springBoardSuccess, springBoardError);
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.15 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{
+                [workspace openApplicationWithBundleIdentifier:mainBundleIdentifier
+                                                   configuration:nil
+                                               completionHandler:^(BOOL success, NSError *error) {
+                    NSLog(@"[LiveContainer] host handoff success=%d error=%@", success, error);
+                    if (success) {
+                        terminateAfterSuccessfulLaunch();
+                    }
+                }];
+            });
+        }];
+        return YES;
     }
     
     if (!self.certificatePassword) {
