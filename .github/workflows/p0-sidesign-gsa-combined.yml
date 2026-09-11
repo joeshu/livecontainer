@@ -14,7 +14,7 @@ jobs:
       scheme: LiveContainer
       archive_path: archive
       SIDESTORE_REPOSITORY: joeshu/SideStore
-      SIDESTORE_COMMIT: c0b2024b341903cfa2af1b7884aa6cb67f9e74a6
+      SIDESTORE_COMMIT: 645bd11153e6d103bd90850e0c17f9384c2a136c
 
     steps:
       - name: Setup Xcode
@@ -45,7 +45,7 @@ jobs:
             -configuration Release \
             | xcbeautify --renderer github-actions
 
-      - name: Build SideStore with iloader-compatible GSA patch
+      - name: Build SideStore with iloader-compatible GSA transform
         shell: bash
         run: |
           set -euo pipefail
@@ -62,9 +62,8 @@ jobs:
           git -C Dependencies/SideSign rev-parse HEAD
           test "$(git -C Dependencies/SideSign rev-parse HEAD)" = "0ea22b202ebb5de28615ecec51b276c57aa3ec92"
 
-          echo '=== Apply deterministic GSA compatibility patch ==='
-          git -C Dependencies/SideSign apply --check "$SIDESTORE_DIR/patches/sidesign-gsa-iloader-233.patch"
-          git -C Dependencies/SideSign apply "$SIDESTORE_DIR/patches/sidesign-gsa-iloader-233.patch"
+          echo '=== Apply deterministic GSA compatibility transform ==='
+          python3 scripts/ci/patch_sidesign_gsa.py
           git -C Dependencies/SideSign diff --check
           git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
 
