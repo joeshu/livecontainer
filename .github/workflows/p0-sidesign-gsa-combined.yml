@@ -14,7 +14,7 @@ jobs:
       scheme: LiveContainer
       archive_path: archive
       SIDESTORE_REPOSITORY: joeshu/SideStore
-      SIDESTORE_COMMIT: 645bd11153e6d103bd90850e0c17f9384c2a136c
+      SIDESTORE_COMMIT: ed306317cbc4e36527e8b177bd7bde3d89b5e53c
 
     steps:
       - name: Setup Xcode
@@ -93,7 +93,7 @@ jobs:
           verify_download \
             "$UNICORN_FILE" \
             "4f61907db6aafc56fb3e336b524d742342312f498bb40739f1da55fb4a24614a" \
-            "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip"
+            "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn_xcframework.zip"
 
           python3 scripts/ci/verify_zh_hans_localization.py
           python3 scripts/ci/check_zh_hans_ui_coverage.py
