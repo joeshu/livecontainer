@@ -1,0 +1,136 @@
+name: P0 SideSign GSA combined build
+
+on:
+  push:
+    branches:
+      - codex/p0-sidesign-gsa-combined-20260911
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build patched LiveContainer+SideStore
+    runs-on: macos-latest
+    env:
+      scheme: LiveContainer
+      archive_path: archive
+      SIDESTORE_REPOSITORY: joeshu/SideStore
+      SIDESTORE_COMMIT: c0b2024b341903cfa2af1b7884aa6cb67f9e74a6
+
+    steps:
+      - name: Setup Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26.2'
+
+      - name: Checkout LiveContainer
+        uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Install build tools
+        run: brew install ldid xcbeautify
+
+      - name: Archive LiveContainer
+        shell: bash
+        run: |
+          set -euo pipefail
+          filetype_parameter=$(ls -A | grep -i '\.xcworkspace$' >/dev/null && echo workspace || echo project)
+          file_to_build=$(ls -A | grep -i '\.xcworkspace$' || ls -A | grep -i '\.xcodeproj$')
+          xcodebuild archive \
+            -archivePath "$archive_path" \
+            -scheme "$scheme" \
+            -"$filetype_parameter" "$file_to_build" \
+            -sdk iphoneos \
+            -arch arm64 \
+            -configuration Release \
+            | xcbeautify --renderer github-actions
+
+      - name: Build SideStore with iloader-compatible GSA patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          SIDESTORE_DIR="$RUNNER_TEMP/SideStore"
+          SIDESTORE_IPA="$RUNNER_TEMP/SideStore.ipa"
+          rm -rf "$SIDESTORE_DIR" "$SIDESTORE_IPA"
+
+          git clone "https://github.com/${SIDESTORE_REPOSITORY}.git" "$SIDESTORE_DIR"
+          cd "$SIDESTORE_DIR"
+          git checkout --detach "$SIDESTORE_COMMIT"
+          git submodule update --init --recursive --depth 1
+
+          echo '=== SideSign baseline ==='
+          git -C Dependencies/SideSign rev-parse HEAD
+          test "$(git -C Dependencies/SideSign rev-parse HEAD)" = "0ea22b202ebb5de28615ecec51b276c57aa3ec92"
+
+          echo '=== Apply deterministic GSA compatibility patch ==='
+          git -C Dependencies/SideSign apply --check "$SIDESTORE_DIR/patches/sidesign-gsa-iloader-233.patch"
+          git -C Dependencies/SideSign apply "$SIDESTORE_DIR/patches/sidesign-gsa-iloader-233.patch"
+          git -C Dependencies/SideSign diff --check
+          git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
+
+          ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
+          mkdir -p "$ARTIFACTS_DIR"
+
+          verify_download() {
+            local file="$1"
+            local expected_sha256="$2"
+            local url="$3"
+            if [ -f "$file" ] && ! printf '%s  %s\n' "$expected_sha256" "$file" | shasum -a 256 -c - >/dev/null 2>&1; then
+              rm -f "$file"
+            fi
+            if [ ! -f "$file" ]; then
+              curl -fsSL --retry 3 "$url" -o "$file"
+            fi
+            printf '%s  %s\n' "$expected_sha256" "$file" | shasum -a 256 -c -
+          }
+
+          OPENSSL_FILE="$ARTIFACTS_DIR/https___github_com_krzyzanowskim_OpenSSL_releases_download_3_6_2000_OpenSSL_xcframework_zip"
+          verify_download \
+            "$OPENSSL_FILE" \
+            "37846a8bd302cb2443eff47f1045ab844d0cd40bf82cc6159cfad9aa5c3eff9e" \
+            "https://github.com/krzyzanowskim/OpenSSL/releases/download/3.6.2000/OpenSSL.xcframework.zip"
+
+          UNICORN_FILE="$ARTIFACTS_DIR/https___github_com_mahee96_unicorn_releases_download_2_1_4_multiarch_Unicorn_xcframework_zip"
+          verify_download \
+            "$UNICORN_FILE" \
+            "4f61907db6aafc56fb3e336b524d742342312f498bb40739f1da55fb4a24614a" \
+            "https://github.com/mahee96/unicorn/releases/download/2.1.4-multiarch/Unicorn.xcframework.zip"
+
+          python3 scripts/ci/verify_zh_hans_localization.py
+          python3 scripts/ci/check_zh_hans_ui_coverage.py
+          python3 scripts/ci/workflow.py build
+          cp SideStore.ipa "$SIDESTORE_IPA"
+
+          echo "SIDESTORE_IPA_PATH=$SIDESTORE_IPA" >> "$GITHUB_ENV"
+          echo "SIDESTORE_SOURCE_SHA=$SIDESTORE_COMMIT" >> "$GITHUB_ENV"
+          echo "SIDESTORE_IPA_SHA256=$(shasum -a 256 "$SIDESTORE_IPA" | awk '{print $1}')" >> "$GITHUB_ENV"
+
+      - name: Create combined IPA
+        shell: bash
+        run: |
+          set -euo pipefail
+          echo "Embedding patched SideStore source commit: $SIDESTORE_SOURCE_SHA"
+          sh .github/build_github.sh
+
+      - name: Verify final IPA package
+        shell: bash
+        run: |
+          set -euo pipefail
+          unzip -t "${scheme}+SideStore.ipa" >/dev/null
+          python3 scripts/ci/verify_ipa_package.py --ipa "${scheme}+SideStore.ipa" --mode combined
+          unzip -l "${scheme}+SideStore.ipa" > "$RUNNER_TEMP/combined-files.txt"
+          grep -q 'Payload/LiveContainer.app/Frameworks/SideStoreApp.framework/zh-Hans.lproj/Localizable.strings' "$RUNNER_TEMP/combined-files.txt"
+
+      - name: Upload patched combined IPA
+        uses: actions/upload-artifact@v7
+        with:
+          name: LiveContainer+SideStore-P0-GSA.ipa
+          path: LiveContainer+SideStore.ipa
+
+      - name: Upload SideStore build logs
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: SideStore-P0-GSA-build-logs
+          path: ${{ runner.temp }}/SideStore/build/logs
+          if-no-files-found: ignore
