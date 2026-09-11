@@ -14,7 +14,7 @@ jobs:
       scheme: LiveContainer
       archive_path: archive
       SIDESTORE_REPOSITORY: joeshu/SideStore
-      SIDESTORE_COMMIT: bf3dc835d571423b1b5bd51d02139de86d649ae1
+      SIDESTORE_COMMIT: 1265d05ae2b1d080d3eaf81fc2af08d8441c1f07
 
     steps:
       - name: Setup Xcode
@@ -64,6 +64,7 @@ jobs:
 
           echo '=== Apply deterministic GSA compatibility transform ==='
           python3 scripts/ci/patch_sidesign_gsa.py
+          python3 scripts/ci/patch_sidesign_2fa_p0.py
           git -C Dependencies/SideSign diff --check
           git -C Dependencies/SideSign diff -- Sources/DeveloperPortal/Authentication.swift
 
