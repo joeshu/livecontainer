@@ -83,6 +83,12 @@ jobs:
           git checkout --detach "$SIDESTORE_COMMIT"
           git submodule update --init --recursive --depth 1
 
+          # PR #16 carries deterministic SideSign transforms separately from
+          # the source checkout; apply both before building the embedded IPA.
+          python3 scripts/ci/patch_sidesign_gsa.py
+          python3 scripts/ci/patch_sidesign_2fa_p0.py
+          git -C Dependencies/SideSign diff --check
+
           brew install ldid xcbeautify
 
           ARTIFACTS_DIR="$HOME/Library/Caches/org.swift.swiftpm/artifacts"
