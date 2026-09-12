@@ -14,7 +14,7 @@ jobs:
       scheme: LiveContainer
       archive_path: archive
       SIDESTORE_REPOSITORY: joeshu/SideStore
-      SIDESTORE_COMMIT: d71dd767e6c2142cce487f3d9cf3899cd68d8b98
+      SIDESTORE_COMMIT: a005d92b7d15d9f57b3d8d8c61d10afcac67291f
 
     steps:
       - name: Setup Xcode
