@@ -996,21 +996,23 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             } catch {
                 errorInfo = error.localizedDescription
                 errorShow = true
+                return
             }
             
-            do {
-                // delete ipa if it's in inbox
-                var shouldDelete = false
-                if let documentsDirectory = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
-                    let inboxURL = documentsDirectory.appendingPathComponent("Inbox")
-                    shouldDelete = installUrl.deletingLastPathComponent().standardizedFileURL == inboxURL.standardizedFileURL
+            // Cleanup of the source IPA is best effort. A cleanup failure must
+            // not be reported as an installation failure after the app is ready.
+            if let documentsDirectory = fm.urls(for: .documentDirectory, in: .userDomainMask).first {
+                let inboxURL = documentsDirectory.appendingPathComponent("Inbox")
+                let sourceDirectory = installUrl.deletingLastPathComponent().standardizedFileURL
+                if sourceDirectory == inboxURL.standardizedFileURL,
+                   fm.fileExists(atPath: installUrl.path) {
+                    do {
+                        try fm.removeItem(at: installUrl)
+                    } catch {
+                        NSLog("[LC] failed to remove imported IPA after install: %@ (%@)",
+                              installUrl.path, error.localizedDescription)
+                    }
                 }
-                if shouldDelete {
-                    try fm.removeItem(at: installUrl)
-                }
-            } catch {
-                errorInfo = error.localizedDescription
-                errorShow = true
             }
             return
         }
