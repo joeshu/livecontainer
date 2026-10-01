@@ -89,7 +89,7 @@ class RefreshHandler: NSObject {
         let cancellation = RefreshCancellation()
         try await withTaskCancellationHandler(operation: {
             try Task.checkCancellation()
-            try await withCheckedThrowingContinuation { continuation in
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 DispatchQueue.main.async {
                     if cancellation.isCancelled {
                         continuation.resume(throwing: CancellationError())
@@ -158,9 +158,7 @@ class RefreshHandler: NSObject {
               let bundleIdentifier = bundle.bundleIdentifier else {
             throw failure(6, "Unable to locate LiveProcess bundle. Reinstall LiveContainer+SideStore and keep app extensions (Use Main Profile).")
         }
-        guard let ext = try NSExtension(identifier: bundleIdentifier) else {
-            throw failure(6, "LiveProcess extension is unavailable. Reinstall LiveContainer+SideStore and keep app extensions (Use Main Profile).")
-        }
+        let ext = try NSExtension(identifier: bundleIdentifier)
         self.ext = ext
         ext.setRequestInterruptionBlock { [weak self] _ in
             DispatchQueue.main.async {
