@@ -544,7 +544,7 @@ index 00000000..d9b5ae66
 +"signing.reason.certificate" = "无法读取 SideStore 当前安装使用的签名证书。";
 +"package.invalid_combined" = "安装包必须来自当前更新源，且为包含 LiveProcess 和小组件扩展的 LiveContainer+SideStore。";
 diff --git a/AltStore/zh-Hans.lproj/Localizable.strings b/AltStore/zh-Hans.lproj/Localizable.strings
-index a39a4bd1..23062c3c 100644
+index a39a4bd1..a5317f54 100644
 --- a/AltStore/zh-Hans.lproj/Localizable.strings
 +++ b/AltStore/zh-Hans.lproj/Localizable.strings
 @@ -218,7 +218,6 @@
@@ -563,7 +563,7 @@ index a39a4bd1..23062c3c 100644
  "Import Account" = "导入账户";
  "Failed to export account!" = "导出账户失败！";
  "Failed to export account data!" = "导出账户数据失败！";
-@@ -302,3 +300,10 @@
+@@ -302,3 +300,12 @@
  "Restart SideStore" = "重新启动 SideStore";
  
  "English" = "英文";
@@ -574,6 +574,8 @@ index a39a4bd1..23062c3c 100644
 +"LiveContainer+SideStore must be reinstalled with the new signature. This will close the current app. Keep LiveProcess and Widget extensions, then reopen LiveContainer after installation. Do not delete the app to resign it." = "需要使用新签名重新安装 LiveContainer+SideStore，操作将退出当前应用。请保留 LiveProcess 和小组件扩展，安装完成后重新打开 LiveContainer。请勿通过删除应用来重签。";
 +"Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@" = "签名对象：%@\n证书到期：%@\n描述文件到期：%@\n更新渠道：%@";
 +"The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions." = "重装包必须为来自当前更新源的 LiveContainer+SideStore 组合版，并保留 LiveProcess 和小组件扩展。";
++
++"Version %@%@" = "版本 %@%@";
 diff --git a/AltStore/zh-Hant.lproj/Authentication.strings b/AltStore/zh-Hant.lproj/Authentication.strings
 new file mode 100644
 index 00000000..b803abd5
@@ -696,10 +698,10 @@ index 00000000..035c99e0
 +"%d App IDs Remaining" = "剩餘 %d 個 App ID";
 diff --git a/AltStore/zh-Hant.lproj/Localizable.strings b/AltStore/zh-Hant.lproj/Localizable.strings
 new file mode 100644
-index 00000000..2564c7a6
+index 00000000..77a9e9f7
 --- /dev/null
 +++ b/AltStore/zh-Hant.lproj/Localizable.strings
-@@ -0,0 +1,309 @@
+@@ -0,0 +1,311 @@
 +/* SideStore Simplified Chinese localization */
 +
 +/* Common */
@@ -1009,6 +1011,8 @@ index 00000000..2564c7a6
 +"LiveContainer+SideStore must be reinstalled with the new signature. This will close the current app. Keep LiveProcess and Widget extensions, then reopen LiveContainer after installation. Do not delete the app to resign it." = "需要使用新簽名重新安裝 LiveContainer+SideStore，操作將退出目前應用。請保留 LiveProcess 和小工具擴充功能，安裝完成後重新開啟 LiveContainer。請勿透過刪除應用來重籤。";
 +"Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@" = "簽名物件：%@\n憑證到期：%@\n佈署描述檔到期：%@\n更新管道：%@";
 +"The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions." = "重灌包必須為來自目前更新源的 LiveContainer+SideStore 組合版，並保留 LiveProcess 和小工具擴充功能。";
++
++"Version %@%@" = "版本 %@%@";
 diff --git a/AltStore/zh-Hant.lproj/Main.strings b/AltStore/zh-Hant.lproj/Main.strings
 new file mode 100644
 index 00000000..19f958c9
