@@ -299,7 +299,13 @@ private final class RefreshConnectionReporter: NSObject, RefreshServer {
 
     func onConnection(_ connection: NSXPCConnection!) {
         guard let connection else { return }
-        DispatchQueue.main.async { self.handler?.connected(connection, generation: self.generation) }
+        // Configure the connection before ServerDelegate resumes it. Dispatch
+        // synchronously only for this short setup; refresh RPCs remain async.
+        if Thread.isMainThread {
+            handler?.connected(connection, generation: generation)
+        } else {
+            DispatchQueue.main.sync { self.handler?.connected(connection, generation: self.generation) }
+        }
     }
 
     func finishedLaunching() {

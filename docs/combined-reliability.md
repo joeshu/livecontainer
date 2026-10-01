@@ -39,7 +39,9 @@ The combined source seed uses the published 1.4 combined artifact, version
 3.8.9, and its actual asset size. The updater removes upstream and standalone
 artifacts and uses the current local IPA's size when publishing nightly builds.
 The `1.0` tag is a source distribution endpoint and is excluded from app release
-selection. Keep it available with the updated `apps_ss_lc.json` asset.
+selection. The nightly release job also updates its `apps_ss_lc.json` asset,
+because releases created with `GITHUB_TOKEN` do not trigger another release
+workflow automatically.
 
 ## Validation
 

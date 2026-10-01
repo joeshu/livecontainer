@@ -252,6 +252,13 @@ jobs:
             ${{ needs.build.outputs.artifact2 }}
             .github/apps_nightly.json
             .github/apps_ss_lc.json
+      - name: Update combined self-reinstall source endpoint
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: "1.0"
+          files: .github/apps_ss_lc.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       # Formal releases are versioned and created only by an explicit release commit.
       # Ordinary main pushes update the rolling nightly release only.
       - name: Publish formal release 1.4 once
