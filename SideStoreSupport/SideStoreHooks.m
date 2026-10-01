@@ -11,13 +11,14 @@
 @import UserNotifications;
 @import UIKit;
 
-@interface LCAuthorizedNotificationSettings : UNNotificationSettings
+@interface LCHostNotificationSettings : UNNotificationSettings
+@property UNAuthorizationStatus hostAuthorizationStatus;
 @end
 
-@implementation LCAuthorizedNotificationSettings
+@implementation LCHostNotificationSettings
 
 - (UNAuthorizationStatus)authorizationStatus {
-    return UNAuthorizationStatusAuthorized;
+    return self.hostAuthorizationStatus;
 }
 
 @end
@@ -42,10 +43,27 @@ static id SSSceneObserver;
 - (void)lc_addNotificationRequest:(UNNotificationRequest*)request
             withCompletionHandler:(void (^)(NSError* error))completionHandler {
     LiveProcessSideStoreHandler* handler = [PrivClass(LiveProcessSideStoreHandler) shared];
-    [handler.server addNotificationRequest:request];
-    if (completionHandler) {
-        completionHandler(nil);
+    NSObject *replyLock = [NSObject new];
+    __block BOOL replied = NO;
+    void (^reply)(NSString *) = ^(NSString *message) {
+        @synchronized (replyLock) {
+            if (replied) return;
+            replied = YES;
+        }
+        if (completionHandler) {
+            NSError *error = message ? [NSError errorWithDomain:@"SideStoreNotifications" code:1
+                                                       userInfo:@{NSLocalizedDescriptionKey: message}] : nil;
+            completionHandler(error);
+        }
+    };
+    if (!handler.connection) {
+        reply(@"LiveContainer notification connection is unavailable.");
+        return;
     }
+    id<RefreshServer> server = [handler.connection remoteObjectProxyWithErrorHandler:^(NSError *error) {
+        reply(error.localizedDescription);
+    }];
+    [server addNotificationRequest:request reply:reply];
 }
 
 - (void)lc_removePendingNotificationRequestsWithIdentifiers:(NSArray<NSString*>*)identifiers {
@@ -58,8 +76,27 @@ static id SSSceneObserver;
         return;
     }
 
-    UNNotificationSettings* settings = class_createInstance(LCAuthorizedNotificationSettings.class, 0);
-    completionHandler(settings);
+    LiveProcessSideStoreHandler *handler = [PrivClass(LiveProcessSideStoreHandler) shared];
+    NSObject *replyLock = [NSObject new];
+    __block BOOL replied = NO;
+    void (^reply)(NSInteger) = ^(NSInteger status) {
+        @synchronized (replyLock) {
+            if (replied) return;
+            replied = YES;
+        }
+        LCHostNotificationSettings *settings = class_createInstance(LCHostNotificationSettings.class, 0);
+        settings.hostAuthorizationStatus = (UNAuthorizationStatus)status;
+        completionHandler(settings);
+    };
+    if (!handler.connection) {
+        reply(UNAuthorizationStatusNotDetermined);
+        return;
+    }
+    id<RefreshServer> server = [handler.connection remoteObjectProxyWithErrorHandler:^(NSError *error) {
+        NSLog(@"Unable to read host notification authorization: %@", error.localizedDescription);
+        reply(UNAuthorizationStatusNotDetermined);
+    }];
+    [server notificationAuthorizationStatusWithReply:reply];
 }
 
 @end
@@ -99,7 +136,10 @@ NSURL* SideStoreSource_hook_altStoreSourceURL(id self, SEL cmd) {
     static NSURL* sourceURL = nil;
     static dispatch_once_t onceToken;
     dispatch_once(&onceToken, ^{
-        sourceURL = [NSURL URLWithString:@"https://github.com/LiveContainer/LiveContainer/releases/download/1.0/apps_ss_lc.json"];
+        NSString *configuredURL = [[NSBundle hook_activeBundle] objectForInfoDictionaryKey:@"LCSideStoreSourceURL"];
+        // Old installations have no build configuration. Use this fork's source
+        // rather than silently replacing its combined IPA with an upstream build.
+        sourceURL = [NSURL URLWithString:configuredURL ?: @"https://github.com/joeshu/livecontainer/releases/download/1.0/apps_ss_lc.json"];
     });
     return sourceURL;
 }
@@ -116,7 +156,7 @@ void SideStoreMyAppsViewController_hook_viewDidload(UICollectionViewController* 
                                                                   target:self
                                                                   action:@selector(escapeButtonTapped:)];
         
-    NSMutableArray* oldToolBarItems = [self.navigationItem.leftBarButtonItems mutableCopy];
+    NSMutableArray* oldToolBarItems = [self.navigationItem.leftBarButtonItems mutableCopy] ?: [NSMutableArray array];
     [oldToolBarItems addObject:escapeItem];
     self.navigationItem.leftBarButtonItems = oldToolBarItems;
 }
@@ -201,11 +241,19 @@ void installSideStoreHooks(void) {
     
     // replace altStoreSourceURL
     Method altStoreSourceURLMethod = class_getClassMethod(PrivClass(Source), @selector(altStoreSourceURL));
-    method_setImplementation(altStoreSourceURLMethod, (IMP)SideStoreSource_hook_altStoreSourceURL);
+    if (altStoreSourceURLMethod) {
+        method_setImplementation(altStoreSourceURLMethod, (IMP)SideStoreSource_hook_altStoreSourceURL);
+    } else {
+        NSLog(@"Embedded SideStore is missing altStoreSourceURL; check the pinned integration contract.");
+    }
     
     if (!NSUserDefaults.isLiveProcess) {
         // add escape button
         Method viewDidLoadMethod = class_getInstanceMethod(PrivClass(MyAppsViewController), @selector(viewDidLoad));
+        if (!viewDidLoadMethod) {
+            NSLog(@"Embedded SideStore is missing MyAppsViewController.viewDidLoad");
+            return;
+        }
         SideStoreMyAppsViewController_orig_viewDidload = (void (*)(UICollectionViewController *, SEL))method_getImplementation(viewDidLoadMethod);
         method_setImplementation(viewDidLoadMethod, (IMP)SideStoreMyAppsViewController_hook_viewDidload);
         class_addMethod(PrivClass(MyAppsViewController), @selector(escapeButtonTapped:), (IMP)SideStoreMyAppsViewController_hook_escapeButtonTapped, "v@:@");

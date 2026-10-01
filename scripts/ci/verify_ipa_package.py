@@ -14,7 +14,47 @@ import plistlib
 import sys
 import tempfile
 import zipfile
+import re
+import struct
 from pathlib import Path, PurePosixPath
+
+
+def validate_combined_contract(app: Path, info: dict) -> None:
+    manifest_path = app / "LCBuildManifest.json"
+    try:
+        manifest = json.loads(manifest_path.read_text())
+    except (OSError, ValueError) as exc:
+        fail(f"unable to read combined build manifest: {exc}")
+    if manifest.get("schema_version") != 1:
+        fail("unknown combined build manifest version")
+    repository = manifest.get("repository", "")
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository):
+        fail("invalid combined source repository")
+    expected_source = f"https://github.com/{repository}/releases/download/1.0/apps_ss_lc.json"
+    if info.get("LCSideStoreSourceURL") != expected_source or manifest.get("update_source") != expected_source:
+        fail("combined update source does not match build repository")
+    if manifest.get("channel") not in {"stable", "nightly"} or info.get("LCSideStoreReleaseChannel") != manifest["channel"]:
+        fail("combined release channel does not match build manifest")
+    for key in ("livecontainer_commit", "sidestore_commit"):
+        if not re.fullmatch(r"[0-9a-f]{40}", manifest.get(key, "")):
+            fail(f"invalid build manifest commit: {key}")
+    if info.get("LCSideStoreSourceCommit") != manifest["sidestore_commit"]:
+        fail("embedded SideStore commit does not match build manifest")
+    for key in ("sidestore_ipa_sha256", "sidestore_patch_sha256"):
+        if not re.fullmatch(r"[0-9a-f]{64}", manifest.get(key, "")):
+            fail(f"invalid build manifest checksum: {key}")
+    actions = app / "Metadata.appintents/extract.actionsdata"
+    try:
+        text = actions.read_text()
+    except (OSError, UnicodeError) as exc:
+        fail(f"unable to read combined AppIntents metadata: {exc}")
+    for suffix in ("20RefreshAllAppsIntentV", "26RefreshAllAppsWidgetIntentV"):
+        if f"16SideStoreSupport{suffix}" not in text or f"9SideStore{suffix}" in text:
+            fail(f"invalid combined AppIntent mapping: {suffix}")
+    with (app / "Frameworks/SideStoreApp.framework/SideStore").open("rb") as handle:
+        header = handle.read(32)
+    if len(header) < 32 or struct.unpack_from("<I", header)[0] != 0xFEEDFACF or struct.unpack_from("<I", header, 12)[0] != 6:
+        fail("embedded SideStore must be a 64-bit Mach-O dylib")
 
 
 def fail(message: str) -> "NoReturn":
@@ -150,6 +190,7 @@ def main() -> None:
                     "SideStore",
                     "embedded SideStore executable",
                 )
+                validate_combined_contract(app, info)
                 require_file(
                     framework,
                     "LCAppInfo.plist",

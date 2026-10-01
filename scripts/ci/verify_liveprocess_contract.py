@@ -274,8 +274,11 @@ def main() -> None:
         sidestore_refresh_source,
         [
             "withCheckedThrowingContinuation",
-            "setRefreshContinuation",
-            "resumeRefresh",
+            "state.begin(taskID: taskID)",
+            "continuation?.resume(with: result)",
+            "state.matches(taskID: taskID, phase: phase)",
+            "connection.invalidationHandler",
+            "connection.interruptionHandler",
             "SideStore refresh timed out.",
             "The embedded SideStore XPC client is unavailable.",
         ],

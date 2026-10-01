@@ -66,13 +66,13 @@ struct SideStoreIntentCaller {
     
     // call this when no IntentContext exists (when sidestore is loaded in LiveProcess)
     func callRefreshIntent2(identifier: String, mangledTypeName: String, progressCallback: (Progress)->Void ) async throws {
-        try await withUnsafeThrowingContinuation { (c: UnsafeContinuation<(), any Error>) in
+        let completion = RefreshCompletionGate()
+        try await withCheckedThrowingContinuation { (c: CheckedContinuation<(), any Error>) in
             let parent = PrivateIntentRunner.run(
                         identifier: identifier,
                         mangledTypeName: mangledTypeName
                     ) { result, error in
-                        print("performAction result=\(String(describing: result)), " +
-                              "error=\(String(describing: error))")
+                        guard completion.claim() else { return }
                         if let error {
                             c.resume(throwing: error)
                         } else {
@@ -88,22 +88,22 @@ struct SideStoreIntentCaller {
 
 @available(iOS 17.0, *)
 @objc extension SideStoreClient {
-    @objc(performRefreshForRealWithIdentifier:mangledTypeName:server:)
-    func performRefreshForReal(identifier: String, mangledTypeName: String, server: any RefreshServer) {
+    @objc(performRefreshForRealWithIdentifier:mangledTypeName:taskID:server:)
+    func performRefreshForReal(identifier: String, mangledTypeName: String, taskID: String, server: any RefreshServer) {
         Task {
+            var obs: NSKeyValueObservation? = nil
+            defer { obs?.invalidate() }
             do {
-                var obs: NSKeyValueObservation? = nil
                 try await SideStoreIntentCaller.shared.callRefreshIntent2(identifier: identifier, mangledTypeName: mangledTypeName) { progress in
                     obs = progress.observe(\.fractionCompleted, options: [.new]) { progress, change in
                         if let newValue = change.newValue {
-                            server.updateProgress(newValue)
+                            server.updateProgress(newValue, taskID: taskID)
                         }
                     }
                 }
-                obs?.invalidate()
-                server.finish(nil)
+                server.finish(nil, taskID: taskID)
             } catch {
-                server.finish(error.localizedDescription)
+                server.finish(error.localizedDescription, taskID: taskID)
             }
         }
     }

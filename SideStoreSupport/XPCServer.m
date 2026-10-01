@@ -7,6 +7,7 @@
 
 #import <Foundation/Foundation.h>
 #import "XPCServer.h"
+#import <objc/runtime.h>
 
 @interface ServerDelegate : NSObject <NSXPCListenerDelegate>
 @property NSObject<RefreshServer>* reporter;
@@ -24,14 +25,16 @@
 
 @end
 
-ServerDelegate* staticDelegate = nil;
+static char listenerDelegateKey;
 
 NSXPCListener* startAnonymousListener(NSObject<RefreshServer>* reporter) {
     ServerDelegate *delegate = [ServerDelegate new];
-    staticDelegate = delegate;
     delegate.reporter = reporter;
     NSXPCListener *listener = [NSXPCListener anonymousListener];
     listener.delegate = delegate;
+    // NSXPCListener does not retain its delegate. Keep each delegate alive with
+    // its own listener instead of a global that can be overwritten by a retry.
+    objc_setAssociatedObject(listener, &listenerDelegateKey, delegate, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     [listener resume];
     return listener;
 }

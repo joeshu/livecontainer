@@ -1,0 +1,107 @@
+diff --git a/AltStore/Authentication/ResignAltStoreViewController.swift b/AltStore/Authentication/ResignAltStoreViewController.swift
+index 959dfe40..0b56d193 100644
+--- a/AltStore/Authentication/ResignAltStoreViewController.swift
++++ b/AltStore/Authentication/ResignAltStoreViewController.swift
+@@ -23,6 +23,11 @@ final class ResignAltStoreViewController: UIViewController
+     {
+         super.viewDidLoad()
+         
++        let host = Bundle.Info.activeBundle
++        let isCombined = host.object(forInfoDictionaryKey: "LCSideStoreSourceURL") != nil
++        if isCombined {
++            self.navigationItem.title = NSLocalizedString("Resign LiveContainer+SideStore", comment: "")
++        }
+         self.placeholderView.textLabel.isHidden = true
+         
+         self.placeholderView.detailTextLabel.textAlignment = .left
+@@ -34,7 +39,7 @@ final class ResignAltStoreViewController: UIViewController
+         
+         switch reason {
+             case .expired:
+-                reasonText = NSLocalizedString("The signing certificate used to install SideStore has expired.", comment: "")
++                reasonText = NSLocalizedString("The signing certificate or provisioning profile used to install this app has expired.", comment: "")
+             case .revoked:
+                 reasonText = NSLocalizedString("The signing certificate used to install SideStore was revoked on the Apple Developer portal.", comment: "")
+             case .freeAccountLimitRevoked:
+@@ -64,7 +69,10 @@ final class ResignAltStoreViewController: UIViewController
+         let paragraph1 = NSLocalizedString("To ensure you can continue using SideStore, \nthe app must be reinstalled now using the new certificate. Otherwise, you will be unable to refresh or open SideStore once the old certificate expires.", comment: "")
+         let paragraph2 = NSLocalizedString("This reinstallation registers the new signature with the OS and will terminate SideStore. You can reopen SideStore immediately once reinstallation is completed.", comment: "")
+         
+-        let fullText = "\(header)\n\n\(paragraph1)\n\n\(paragraph2)"
++        var fullText = "\(header)\n\n\(paragraph1)\n\n\(paragraph2)"
++        if isCombined {
++            fullText = header + "\n\n" + NSLocalizedString("LiveContainer+SideStore must be reinstalled with the new signature. This will close the current app. Keep LiveProcess and Widget extensions, then reopen LiveContainer after installation. Do not delete the app to resign it.", comment: "")
++        }
+         let attributedString = NSMutableAttributedString(string: fullText)
+         
+         if let headerRange = fullText.range(of: header) {
+@@ -73,6 +81,26 @@ final class ResignAltStoreViewController: UIViewController
+         }
+         
+         self.placeholderView.detailTextLabel.attributedText = attributedString
++
++        if isCombined {
++            let profile = ALTApplication(fileURL: host.bundleURL)?.provisioningProfile
++            let certificate = CertificateManager.shared.getSigningCertificate(at: host.bundleURL)
++            let formatter = DateFormatter()
++            formatter.dateStyle = .medium
++            formatter.timeStyle = .short
++            let unavailable = NSLocalizedString("Unavailable", comment: "")
++            let certificateExpiry = certificate.map { formatter.string(from: $0.expiryDate) } ?? unavailable
++            let profileExpiry = profile.map { formatter.string(from: $0.expirationDate) } ?? unavailable
++            let details = UILabel()
++            details.numberOfLines = 0
++            details.font = .systemFont(ofSize: 12)
++            details.textColor = UIColor.white.withAlphaComponent(0.7)
++            details.text = String(format: NSLocalizedString("Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@", comment: ""),
++                                  host.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "LiveContainer+SideStore",
++                                  certificateExpiry, profileExpiry,
++                                  host.object(forInfoDictionaryKey: "LCSideStoreReleaseChannel") as? String ?? unavailable)
++            self.placeholderView.stackView.addArrangedSubview(details)
++        }
+         
+         // Separator Line
+         let separator = UIView()
+diff --git a/AltStore/zh-Hans.lproj/Localizable.strings b/AltStore/zh-Hans.lproj/Localizable.strings
+index a39a4bd1..f482cd96 100644
+--- a/AltStore/zh-Hans.lproj/Localizable.strings
++++ b/AltStore/zh-Hans.lproj/Localizable.strings
+@@ -302,3 +302,10 @@
+ "Restart SideStore" = "重新启动 SideStore";
+ 
+ "English" = "英文";
++
++// LiveContainer combined installation
++"Resign LiveContainer+SideStore" = "重新签名 LiveContainer+SideStore";
++"The signing certificate or provisioning profile used to install this app has expired." = "安装此应用时使用的签名证书或描述文件已过期。";
++"LiveContainer+SideStore must be reinstalled with the new signature. This will close the current app. Keep LiveProcess and Widget extensions, then reopen LiveContainer after installation. Do not delete the app to resign it." = "需要使用新签名重新安装 LiveContainer+SideStore，操作将退出当前应用。请保留 LiveProcess 和小组件扩展，安装完成后重新打开 LiveContainer。请勿通过删除应用来重签。";
++"Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@" = "签名对象：%@\n证书到期：%@\n描述文件到期：%@\n更新渠道：%@";
++"The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions." = "重装包必须为来自当前更新源的 LiveContainer+SideStore 组合版，并保留 LiveProcess 和小组件扩展。";
+diff --git a/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift b/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift
+index 2ecb61b7..41ce5abf 100644
+--- a/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift
++++ b/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift
+@@ -134,6 +134,23 @@ final class DownloadAppOperation: BasePipelineOperation<InstallAppOperationConte
+         }
+         
+         let appBundle = try await downloadIPA(from: sourceURL)
++
++        // Embedded SideStore reinstalls its host. Reject a standalone or foreign
++        // channel package before resigning or altering the installed application.
++        let host = Bundle.Info.activeBundle
++        if self.context.bundleIdentifier == Bundle.Info.appbundleIdentifier,
++           let expectedSource = host.object(forInfoDictionaryKey: "LCSideStoreSourceURL") as? String {
++            let candidate = appBundle.bundle
++            let candidateID = candidate.object(forInfoDictionaryKey: "ALTBundleIdentifier") as? String ?? appBundle.bundleIdentifier
++            let paths = ["Frameworks/SideStoreApp.framework/SideStore",
++                         "PlugIns/LiveProcess.appex", "PlugIns/LiveWidgetExtension.appex"]
++            guard candidateID == Bundle.Info.appbundleIdentifier,
++                  candidate.object(forInfoDictionaryKey: "LCSideStoreSourceURL") as? String == expectedSource,
++                  paths.allSatisfy({ FileManager.default.fileExists(atPath: candidate.bundleURL.appendingPathComponent($0).path) }) else {
++                throw OperationError.invalidParameters(NSLocalizedString("The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions.", comment: ""))
++            }
++        }
++
+         
+         if self.context.bundleIdentifier == StoreApp.dolphinAppID, self.context.bundleIdentifier != appBundle.bundleIdentifier {
+             if var infoPlist = NSDictionary(contentsOf: appBundle.bundle.infoPlistURL) as? [String: Any] {

@@ -11,3 +11,26 @@ jobs:
       - uses: actions/checkout@v4
       - name: Verify executable LiveProcess state contract
         run: python3 scripts/ci/verify_liveprocess_contract.py
+
+  verify-combined-lifecycle:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run refresh lifecycle regressions
+        run: |
+          swiftc SideStoreSupport/RefreshTaskState.swift scripts/ci/tests/main.swift -o "$RUNNER_TEMP/refresh-tests"
+          "$RUNNER_TEMP/refresh-tests"
+      - name: Run combined source and package regressions
+        run: python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
+      - name: Checkout pinned SideStore contract
+        uses: actions/checkout@v6
+        with:
+          repository: joeshu/SideStore
+          ref: 4df0cfc2c45965f4bbe6fe005ae4a720be1297ca
+          path: .sidestore-contract
+      - name: Validate pinned SideStore integration patch
+        run: |
+          git -C .sidestore-contract apply --check "$GITHUB_WORKSPACE/scripts/patches/sidestore-combined-reinstall.patch"
+          git -C .sidestore-contract apply "$GITHUB_WORKSPACE/scripts/patches/sidestore-combined-reinstall.patch"
+          python3 .sidestore-contract/scripts/ci/verify_zh_hans_localization.py
+          python3 .sidestore-contract/scripts/ci/check_zh_hans_ui_coverage.py

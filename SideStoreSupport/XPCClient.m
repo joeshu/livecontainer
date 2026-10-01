@@ -13,6 +13,7 @@
 @interface SideStoreClient(Swift)
 - (void)performRefreshForRealWithIdentifier:(NSString*)identifier
                             mangledTypeName:(NSString*)mangledTypeName
+                                     taskID:(NSString*)taskID
                                      server:(id <RefreshServer> _Nonnull)server;
 
 @end
@@ -60,11 +61,11 @@ void installSideStoreHooks(void);
     [LCSharedUtils launchToGuestAppWithClassicMode:0];
 }
 
-- (void)refreshAllAppsWithIdentifier:(NSString*)identifier mangledTypeName:(NSString *)mangledTypeName {
+- (void)refreshAllAppsWithIdentifier:(NSString*)identifier mangledTypeName:(NSString *)mangledTypeName taskID:(NSString*)taskID {
     if(!handler) {
         return;
     }
-    [self performRefreshForRealWithIdentifier:identifier mangledTypeName:mangledTypeName server:handler.server];
+    [self performRefreshForRealWithIdentifier:identifier mangledTypeName:mangledTypeName taskID:taskID server:handler.server];
 }
 
 @end

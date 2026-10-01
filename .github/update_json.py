@@ -3,7 +3,11 @@ import plistlib
 import re
 import requests
 import os
-from datetime import datetime
+from datetime import datetime, timezone
+from pathlib import Path
+import sys
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts/ci"))
+from combined_source import normalize_combined_source
 
 
 def github_api_headers():
@@ -35,7 +39,9 @@ def fetch_latest_release(repo_url, is_nightly: bool):
         releases = response.json()
         latest_release = next((
             release for release in releases
-            if (release["tag_name"] == "nightly") == is_nightly
+            if not release.get("draft", False)
+            and release["tag_name"] != "1.0"
+            and (release["tag_name"] == "nightly") == is_nightly
         ), None)
         return [latest_release] if latest_release else []
     except requests.RequestException as e:
@@ -131,7 +137,7 @@ def update_json_file_release(repo_url, json_file, latest_release):
         "notify": True,
         "tintColor": "#0784FC",
         "title": f"{full_version} - LiveContainer  {date_string}",
-        "url": f"https://github.com/LiveContainer/LiveContainer/releases/tag/{tag}"
+        "url": f"https://github.com/{repo_url}/releases/tag/{tag}"
     }
 
     news_entry_exists = any(item["identifier"] == news_identifier for item in data["news"])
@@ -176,7 +182,7 @@ def update_json_file_nightly(json_file, nightly_release):
     commit_msg = os.environ.get("commit_msg", "").strip()
 
     description = f"""\
-Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer/commit/{commit_sha}):\
+Nightly build from [{commit_sha}](https://github.com/{os.environ.get("GITHUB_REPOSITORY", "joeshu/livecontainer")}/commit/{commit_sha}):\
  {commit_msg}
 
 This is a nightly release [created automatically with GitHub Actions workflow]({nightly_link}).
@@ -237,10 +243,10 @@ def update_json_file_release_ss_lc(repo_url, json_file, latest_release, is_night
         return
 
     try:
-        apps_json_url = f"https://github.com/{repo_url}/releases/download/1.0/apps_ss_lc.json"
-        response = requests.get(apps_json_url)
-        response.raise_for_status()
-        data = response.json()
+        # The checked-in seed belongs to this fork. Never import upstream or a
+        # stale remote source while constructing a release's self-reinstall feed.
+        with open(json_file) as file:
+            data = normalize_combined_source(json.load(file), repo_url)
     except json.JSONDecodeError as e:
         print(f"Error reading JSON file: {e}")
         data = {"apps": []}
@@ -261,7 +267,7 @@ def update_json_file_release_ss_lc(repo_url, json_file, latest_release, is_night
     commit_msg = os.environ.get("commit_msg", "").strip()
 
     description = f"""\
-Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer/commit/{commit_sha}):\
+Nightly build from [{commit_sha}](https://github.com/{os.environ.get("GITHUB_REPOSITORY", "joeshu/livecontainer")}/commit/{commit_sha}):\
  {commit_msg}
     """
     assets = latest_release.get("assets", [])
@@ -273,6 +279,11 @@ Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer
             size = asset["size"]
             break
 
+    local_ipa = Path("LiveContainer+SideStore.ipa")
+    if is_nightly and local_ipa.is_file():
+        download_url = f"https://github.com/{repo_url}/releases/download/nightly/LiveContainer%2BSideStore.ipa"
+        size = local_ipa.stat().st_size
+        version_date = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     if download_url is None or size is None:
         print("Error: IPA file not found in release assets.")
         return
@@ -320,7 +331,7 @@ Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer
             "notify": True,
             "tintColor": "#0784FC",
             "title": f"{full_version} - LiveContainer  {date_string}",
-            "url": f"https://github.com/LiveContainer/LiveContainer/releases/tag/{tag}"
+            "url": f"https://github.com/{repo_url}/releases/tag/{tag}"
         }
 
         news_entry_exists = any(item["identifier"] == news_identifier for item in data["news"])
@@ -333,6 +344,7 @@ Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer
                 continue
             channel['releases'] = [version_entry]
     try:
+        data = normalize_combined_source(data, repo_url)
         with open(json_file, "w") as file:
             json.dump(data, file, indent=2)
         print("JSON file updated successfully.")
@@ -342,7 +354,7 @@ Nightly build from [{commit_sha}](https://github.com/LiveContainer/LiveContainer
 
 
 def main():
-    repo_url = "LiveContainer/LiveContainer"
+    repo_url = os.environ.get("GITHUB_REPOSITORY", "joeshu/livecontainer")
     is_nightly = "NIGHTLY_LINK" in os.environ
 
     try:
