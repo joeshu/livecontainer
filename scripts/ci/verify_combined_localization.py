@@ -58,6 +58,10 @@ def verify(root):
     source = (host / 'SideStoreSupport/SideStore.swift').read_text()
     for key in re.findall(r'RefreshLocalization.text\("([^"]+)"', source):
         assert key in refresh['en'], f'Missing refresh error key: {key}'
+    for source in host.rglob('*.m'):
+        if '.sidestore-contract' in source.parts:
+            continue
+        assert not re.search(r'\blocalizeWithFormat\s*:', source.read_text()), f'{source}: obsolete Objective-C formatter call'
     catalog = json.loads((host / 'Resources/Localizable.xcstrings').read_text())['strings']
     for key, entry in catalog.items():
         localizations = entry.get('localizations', {})

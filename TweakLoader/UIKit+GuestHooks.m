@@ -103,7 +103,7 @@ void LCShowSwitchAppConfirmation(NSURL *url, NSString* bundleId, bool isSharedAp
         return;
     }
 
-    NSString *message = [@"lc.guestTweak.appSwitchTip %@" localizeWithFormat:bundleId];
+    NSString *message = [NSString lcLocalizedStringWithFormat:@"lc.guestTweak.appSwitchTip %@", bundleId];
     UIWindow *window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"LiveContainer" message:message preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:@"lc.common.ok".loc style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
@@ -115,7 +115,7 @@ void LCShowSwitchAppConfirmation(NSURL *url, NSString* bundleId, bool isSharedAp
     
     if(isSharedApp) {
         forEachInstalledNotCurrentLC(NO, ^(NSString * scheme, BOOL* isBreak) {
-            UIAlertAction* openlcAction = [UIAlertAction actionWithTitle:[@"lc.guestTweak.openInLc %@" localizeWithFormat:scheme] style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
+            UIAlertAction* openlcAction = [UIAlertAction actionWithTitle:[NSString lcLocalizedStringWithFormat:@"lc.guestTweak.openInLc %@", scheme] style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
                 newUrlComp.scheme = scheme;
                 [UIApplication.sharedApplication openURL:newUrlComp.URL options:@{} completionHandler:nil];
                 window.windowScene = nil;
@@ -152,7 +152,7 @@ void LCShowAlert(NSString* message) {
 }
 
 void LCShowAppNotFoundAlert(NSString* bundleId) {
-    LCShowAlert([@"lc.guestTweak.error.bundleNotFound %@" localizeWithFormat: bundleId]);
+    LCShowAlert([NSString lcLocalizedStringWithFormat:@"lc.guestTweak.error.bundleNotFound %@", bundleId]);
 }
 
 void openUniversalLink(NSString* decodedUrl) {
@@ -218,7 +218,7 @@ void LCOpenWebPage(NSString* webPageUrlString, NSString* originalUrl) {
     }];
 
     forEachInstalledNotCurrentLC(NO, ^(NSString * scheme, BOOL* isBreak) {
-        UIAlertAction* openlc2Action = [UIAlertAction actionWithTitle:[@"lc.guestTweak.openInLc %@" localizeWithFormat:scheme] style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
+        UIAlertAction* openlc2Action = [UIAlertAction actionWithTitle:[NSString lcLocalizedStringWithFormat:@"lc.guestTweak.openInLc %@", scheme] style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
             newUrlComp.scheme = scheme;
             [UIApplication.sharedApplication openURL:newUrlComp.URL options:@{} completionHandler:nil];
             window.windowScene = nil;
@@ -247,7 +247,7 @@ void LCOpenSideStoreURL(NSURL* sidestoreUrl) {
         [NSUserDefaults.lcUserDefaults setObject:@"builtinSideStore" forKey:@"selected"];
         [NSClassFromString(@"LCSharedUtils") launchToGuestAppWithClassicMode:0];
     }
-    NSString *message = [@"lc.guestTweak.appSwitchTip %@" localizeWithFormat:@"SideStore"];
+    NSString *message = [NSString lcLocalizedStringWithFormat:@"lc.guestTweak.appSwitchTip %@", @"SideStore"];
     UIWindow *window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
     UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"LiveContainer" message:message preferredStyle:UIAlertControllerStyleAlert];
     UIAlertAction* okAction = [UIAlertAction actionWithTitle:@"lc.common.ok".loc style:UIAlertActionStyleDefault handler:^(UIAlertAction * action) {
