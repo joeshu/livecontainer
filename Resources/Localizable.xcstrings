@@ -6384,13 +6384,13 @@
         },
         "zh-Hans": {
           "stringUnit": {
-            "state": "needs_review",
+            "state": "translated",
             "value": "兼容模式"
           }
         },
         "zh-Hant": {
           "stringUnit": {
-            "state": "needs_review",
+            "state": "translated",
             "value": "相容模式"
           }
         }
@@ -6403,6 +6403,18 @@
           "stringUnit": {
             "state": "translated",
             "value": "(Experimental) Guides the system to display the app at the appropriate resolution. On iPad OS, the app will be displayed in iPhone mode if it does not natively support iPad."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（实验功能）引导系统以合适的分辨率显示应用。在 iPadOS 上，未原生支持 iPad 的应用将以 iPhone 模式显示。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "（實驗功能）引導系統以合適的解析度顯示應用。在 iPadOS 上，未原生支援 iPad 的應用將以 iPhone 模式顯示。"
           }
         }
       }
@@ -8674,6 +8686,18 @@
             "state": "translated",
             "value": "32-bit emulator"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 位模拟器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 位元模擬器"
+          }
         }
       }
     },
@@ -8803,6 +8827,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "签名工具"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "簽名工具"
           }
         }
       }
@@ -12851,6 +12881,12 @@
             "state": "translated",
             "value": "推荐"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建議"
+          }
         }
       }
     },
@@ -14092,6 +14128,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无效的 IDFV"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無效的 IDFV"
           }
         }
       }
@@ -17698,7 +17740,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "证书团队名"
+            "value": "证书团队 ID"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "憑證團隊 ID"
           }
         }
       }
@@ -17876,7 +17924,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "预期团队ID"
+            "value": "预期团队 ID"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預期團隊 ID"
           }
         }
       }
@@ -19816,6 +19870,12 @@
             "state": "translated",
             "value": "缓存清理完成"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快取已清除。"
+          }
         }
       }
     },
@@ -19881,6 +19941,12 @@
             "state": "translated",
             "value": "确认清除缓存？"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要清除快取嗎？"
+          }
         }
       }
     },
@@ -19945,6 +20011,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "清理缓存"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除快取"
           }
         }
       }
@@ -20624,7 +20696,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "清理 tmp 内容"
+            "value": "清理临时文件"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除暫存檔案"
           }
         }
       }
@@ -20690,7 +20768,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已清理 tmp 内容。"
+            "value": "临时文件已清理。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫存檔案已清除。"
           }
         }
       }
@@ -20756,7 +20840,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "要删除 tmp 内容吗？"
+            "value": "要删除临时文件吗？"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "要刪除暫存檔案嗎？"
           }
         }
       }
@@ -20903,6 +20993,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除通知"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "清除通知"
@@ -22011,6 +22107,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "隐藏折叠 Dock"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "隱藏收合的 Dock"
           }
         }
       }
@@ -25696,6 +25798,12 @@
             "state": "translated",
             "value": "启动优先级"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "啟動優先順序"
+          }
         }
       }
     },
@@ -25761,6 +25869,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "拖动 LiveContainer 来设置启动共享 App 时的尝试顺序。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "拖移 LiveContainer，設定啟動共用應用時的嘗試順序。"
           }
         }
       }
@@ -26321,6 +26435,12 @@
             "state": "translated",
             "value": "没有可清理的缓存。"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可清除的快取。"
+          }
         }
       }
     },
@@ -26580,7 +26700,13 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "没有可清理的 tmp 内容。"
+            "value": "没有可清理的临时文件。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可清除的暫存檔案。"
           }
         }
       }
@@ -27145,6 +27271,18 @@
             "state": "translated",
             "value": "Default 32-bit emulator"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认 32 位模拟器"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "預設 32 位元模擬器"
+          }
         }
       }
     },
@@ -27197,6 +27335,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "若AltSign签名遇到问题，可尝试使用ZSign，反之亦然。切换签名工具后请重启LiveContainer。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "若 AltSign 簽名遇到問題，可嘗試使用 ZSign，反之亦然。切換簽名工具後，請重新啟動 LiveContainer。"
           }
         }
       }
@@ -27749,6 +27893,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "存储管理"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存空間管理"
           }
         }
       }
@@ -28307,6 +28457,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "此App没有可用的容器。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此應用沒有可用的容器。"
           }
         }
       }
@@ -29673,6 +29829,12 @@
             "state": "translated",
             "value": "推荐源"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建議來源"
+          }
         }
       }
     },
@@ -29701,6 +29863,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "无可用的推荐源。"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有可用的建議來源。"
           }
         }
       }
@@ -30509,6 +30677,12 @@
             "state": "translated",
             "value": "应用本体"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "應用程式套件"
+          }
         }
       }
     },
@@ -30574,6 +30748,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "App Group 数据"
+          }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App Group 資料"
           }
         }
       }
@@ -30641,6 +30821,12 @@
             "state": "translated",
             "value": "计算中…"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "計算中…"
+          }
         }
       }
     },
@@ -30702,6 +30888,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "容器"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "容器"
@@ -30771,6 +30963,12 @@
             "state": "translated",
             "value": "已安装应用"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已安裝應用"
+          }
         }
       }
     },
@@ -30836,6 +31034,12 @@
             "state": "translated",
             "value": "没有应用存储数据"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "沒有應用儲存資料"
+          }
         }
       }
     },
@@ -30898,6 +31102,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "其他"
@@ -30967,6 +31177,12 @@
             "state": "translated",
             "value": "临时文件"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暫存檔案"
+          }
         }
       }
     },
@@ -31032,6 +31248,12 @@
             "state": "translated",
             "value": "总存储"
           }
+        },
+        "zh-Hant": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "儲存空間總計"
+          }
         }
       }
     },
@@ -31093,6 +31315,12 @@
           }
         },
         "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Tweaks"
+          }
+        },
+        "zh-Hant": {
           "stringUnit": {
             "state": "translated",
             "value": "Tweaks"

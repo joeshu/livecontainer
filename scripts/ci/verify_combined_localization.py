@@ -44,7 +44,7 @@ def verify(root):
             assert arguments(value) == arguments(hant[key]), f'{src.name}/{key}: traditional format mismatch'
     info = plistlib.loads((root / 'AltStore/Info.plist').read_bytes())
     assert 'zh-Hant' in info['CFBundleLocalizations'], 'Traditional language missing in Info.plist'
-    for source in ['AltStore/Authentication/ResignAltStoreViewController.swift', 'AltStore/Settings/SettingsViewController.swift']:
+    for source in ['AltStore/Authentication/ResignAltStoreViewController.swift', 'AltStore/Settings/SettingsViewController.swift', 'SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift']:
         text = (root / source).read_text()
         for key in re.findall(r'SideStoreLocalization\.(?:text|format)\("([^"]+)"', text):
             assert key in english, f'{source}: missing stable key {key}'
@@ -58,6 +58,18 @@ def verify(root):
     source = (host / 'SideStoreSupport/SideStore.swift').read_text()
     for key in re.findall(r'RefreshLocalization.text\("([^"]+)"', source):
         assert key in refresh['en'], f'Missing refresh error key: {key}'
+    catalog = json.loads((host / 'Resources/Localizable.xcstrings').read_text())['strings']
+    for key, entry in catalog.items():
+        localizations = entry.get('localizations', {})
+        for lang in ['zh-Hans', 'zh-Hant']:
+            assert lang in localizations, f'Host {key}: missing {lang}'
+            unit = localizations[lang].get('stringUnit')
+            if unit:
+                assert unit['state'] == 'translated', f'Host {key}/{lang}: unreviewed translation state'
+                source_unit = localizations.get('en', {}).get('stringUnit')
+                if source_unit:
+                    assert arguments(unit['value']) == arguments(source_unit['value']), f'Host {key}/{lang}: format mismatch'
+    print(f'PASS: {len(catalog)} host keys cover both Chinese scripts')
     print(f'PASS: {len(english)} stable recovery keys in 3 languages; traditional files and format arguments match')
 
 if __name__ == '__main__':

@@ -43,5 +43,5 @@ jobs:
           cp .sidestore-contract/AltStore/Info.plist "$RUNNER_TEMP/LocalizationFixture.bundle/Info.plist"
           swiftc .sidestore-contract/Shared/Localization/SideStoreLanguagePolicy.swift .sidestore-contract/Shared/Localization/LocalizedResourceLookup.swift LiveContainerSwiftUI/Utilities/LocalizedFormatting.swift scripts/ci/tests/localization/main.swift -o "$RUNNER_TEMP/localization-tests"
           "$RUNNER_TEMP/localization-tests" "$RUNNER_TEMP/LocalizationFixture.bundle"
-          clang -fobjc-arc -fblocks -framework Foundation -I LiveContainer LiveContainer/Localization.m scripts/ci/tests/localization/Formatting.m -o "$RUNNER_TEMP/objc-localization-tests"
+          clang -fmodules -fobjc-arc -fblocks -framework Foundation -I LiveContainer LiveContainer/Localization.m scripts/ci/tests/localization/Formatting.m -o "$RUNNER_TEMP/objc-localization-tests"
           "$RUNNER_TEMP/objc-localization-tests"
