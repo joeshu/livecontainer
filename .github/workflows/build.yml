@@ -133,6 +133,8 @@ jobs:
 
           python3 scripts/ci/verify_zh_hans_localization.py
           python3 scripts/ci/check_zh_hans_ui_coverage.py
+          python3 scripts/ci/verify_language_switch.py
+          python3 "$LC_SOURCE_DIR/scripts/ci/verify_combined_localization.py" .
           python3 scripts/ci/workflow.py build
           cp SideStore.ipa "$SIDESTORE_IPA"
 

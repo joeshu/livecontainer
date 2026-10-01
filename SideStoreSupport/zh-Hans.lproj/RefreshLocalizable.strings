@@ -1,0 +1,12 @@
+"refresh.busy" = "已有刷新任务正在进行，请稍后重试。";
+"refresh.listener" = "无法建立刷新通信，请重新打开 LiveContainer 后重试。";
+"refresh.home" = "无法访问 LiveContainer 数据目录，请重新打开应用后重试。";
+"refresh.bookmark" = "无法为 SideStore 授予数据目录访问权限，请重新打开应用后重试。";
+"refresh.extension" = "找不到 LiveProcess 扩展。请覆盖安装 LiveContainer+SideStore，并保留应用扩展（签名时选择 Use Main Profile）。";
+"refresh.quit" = "内置 SideStore 意外退出，请重新打开后重试。";
+"refresh.start" = "内置 SideStore 启动失败，请重新打开后重试。";
+"refresh.interrupted" = "SideStore 刷新连接中断，请重试。";
+"refresh.invalidated" = "SideStore 刷新连接已失效，请重试。";
+"refresh.client" = "无法连接内置 SideStore，请重新打开 LiveContainer 后重试。";
+"refresh.start_timeout" = "内置 SideStore 启动超时，请重试。";
+"refresh.timeout" = "SideStore 刷新超时，请检查网络和 VPN 连接后重试。";

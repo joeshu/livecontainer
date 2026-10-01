@@ -111,7 +111,7 @@ class RefreshHandler: NSObject {
                        progress: Progress, continuation: CheckedContinuation<Void, any Error>) {
         // Reserve the entire operation before starting an extension or awaiting XPC.
         guard state.taskID == nil else {
-            continuation.resume(throwing: failure(2, "Another refresh task is in progress."))
+            continuation.resume(throwing: failure(2, RefreshLocalization.text("refresh.busy", default: "Another refresh task is in progress.")))
             return
         }
         if sideStorePid <= 0 || getpgid(sideStorePid) < 0 {
@@ -142,27 +142,27 @@ class RefreshHandler: NSObject {
         let generation = state.generation
         let reporter = RefreshConnectionReporter(handler: self, generation: generation)
         guard let listener = startAnonymousListener(reporter) else {
-            throw failure(3, "Unable to create the refresh XPC listener.")
+            throw failure(3, RefreshLocalization.text("refresh.listener", default: "Unable to create the refresh XPC listener."))
         }
         self.listener = listener
         guard let homePointer = getenv("LC_HOME_PATH"),
               let home = String(validatingUTF8: homePointer), !home.isEmpty else {
-            throw failure(4, "LiveContainer home path is unavailable.")
+            throw failure(4, RefreshLocalization.text("refresh.home", default: "LiveContainer home path is unavailable."))
         }
         let homeURL = URL(fileURLWithPath: home).appendingPathComponent("Documents/SideStore")
         guard let bookmark = bookmarkForURL(homeURL) else {
-            throw failure(5, "Unable to create a security-scoped bookmark for SideStore.")
+            throw failure(5, RefreshLocalization.text("refresh.bookmark", default: "Unable to create a security-scoped bookmark for SideStore."))
         }
         guard let extensionURL = UserDefaults.lcMainBundle().builtInPlugInsURL?.appendingPathComponent("LiveProcess.appex"),
               let bundle = Bundle(url: extensionURL),
               let bundleIdentifier = bundle.bundleIdentifier else {
-            throw failure(6, "Unable to locate LiveProcess bundle. Reinstall LiveContainer+SideStore and keep app extensions (Use Main Profile).")
+            throw failure(6, RefreshLocalization.text("refresh.extension", default: "Unable to locate LiveProcess bundle. Reinstall LiveContainer+SideStore and keep app extensions (Use Main Profile)."))
         }
         let ext = try NSExtension(identifier: bundleIdentifier)
         self.ext = ext
         ext.setRequestInterruptionBlock { [weak self] _ in
             DispatchQueue.main.async {
-                self?.processFailed(generation: generation, message: "Built-in SideStore quit unexpectedly")
+                self?.processFailed(generation: generation, message: RefreshLocalization.text("refresh.quit", default: "Built-in SideStore quit unexpectedly"))
             }
         }
         let item = NSExtensionItem()
@@ -178,7 +178,7 @@ class RefreshHandler: NSObject {
                 }
                 self.sideStorePid = ext.pid(forRequestIdentifier: request)
                 guard self.sideStorePid > 0 else {
-                    self.processFailed(generation: generation, message: "Built-in SideStore failed to start.")
+                    self.processFailed(generation: generation, message: RefreshLocalization.text("refresh.start", default: "Built-in SideStore failed to start."))
                     return
                 }
                 self.state.markLaunchReturned(generation: generation)
@@ -197,12 +197,12 @@ class RefreshHandler: NSObject {
         connection.remoteObjectInterface = NSXPCInterface(with: RefreshClient.self)
         connection.interruptionHandler = { [weak self] in
             DispatchQueue.main.async {
-                self?.processFailed(generation: generation, message: "SideStore refresh XPC connection was interrupted.")
+                self?.processFailed(generation: generation, message: RefreshLocalization.text("refresh.interrupted", default: "SideStore refresh XPC connection was interrupted."))
             }
         }
         connection.invalidationHandler = { [weak self] in
             DispatchQueue.main.async {
-                self?.processFailed(generation: generation, message: "SideStore refresh XPC connection was invalidated.")
+                self?.processFailed(generation: generation, message: RefreshLocalization.text("refresh.invalidated", default: "SideStore refresh XPC connection was invalidated."))
             }
         }
         client = connection.remoteObjectProxyWithErrorHandler { [weak self] error in
@@ -211,7 +211,7 @@ class RefreshHandler: NSObject {
             }
         } as? RefreshClient
         guard client != nil else {
-            processFailed(generation: generation, message: "The embedded SideStore XPC client is unavailable.")
+            processFailed(generation: generation, message: RefreshLocalization.text("refresh.client", default: "The embedded SideStore XPC client is unavailable."))
             return
         }
         state.markConnected(generation: generation)
@@ -233,7 +233,7 @@ class RefreshHandler: NSObject {
         timeout?.cancel()
         let work = DispatchWorkItem { [weak self] in
             guard let self, self.state.matches(taskID: taskID, phase: phase) else { return }
-            let message = phase == .launching ? "Built-in SideStore failed to start in reasonable time" : "SideStore refresh timed out."
+            let message = phase == .launching ? RefreshLocalization.text("refresh.start_timeout", default: "Built-in SideStore failed to start in reasonable time") : RefreshLocalization.text("refresh.timeout", default: "SideStore refresh timed out.")
             self.complete(taskID: taskID, result: .failure(self.failure(9, message)), resetProcess: true)
         }
         timeout = work

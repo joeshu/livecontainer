@@ -664,6 +664,12 @@ static void exceptionHandler(NSException *exception) {
 int LiveContainerMain(int argc, char *argv[]) {
     lcMainBundle = [NSBundle mainBundle];
     lcUserDefaults = NSUserDefaults.standardUserDefaults;
+    // Snapshot the containing application's language order before redirecting
+    // preferences and CoreFoundation caches into a guest app's domain.
+    NSData *hostLanguages = [NSJSONSerialization dataWithJSONObject:NSLocale.preferredLanguages options:0 error:nil];
+    NSString *hostLanguagesJSON = hostLanguages ? [[NSString alloc] initWithData:hostLanguages encoding:NSUTF8StringEncoding] : nil;
+    if (hostLanguagesJSON) setenv("LC_HOST_LANGUAGES", hostLanguagesJSON.UTF8String, 1);
+
     
     lcSharedDefaults = [[NSUserDefaults alloc] initWithSuiteName: [LCSharedUtils appGroupID]];
     lcAppUrlScheme = NSBundle.mainBundle.infoDictionary[@"CFBundleURLTypes"][0][@"CFBundleURLSchemes"][0];

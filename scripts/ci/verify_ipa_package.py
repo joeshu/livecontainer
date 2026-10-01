@@ -201,28 +201,22 @@ def main() -> None:
                 if (root / "Payload/SideStore.app").exists():
                     fail("raw SideStore.app remains beside the host application")
 
-                localization_root = framework / "zh-Hans.lproj"
-                if not localization_root.is_dir():
-                    fail("embedded SideStore zh-Hans.lproj is missing")
-                resources = sorted(
-                    item.name for item in localization_root.iterdir() if item.is_file()
-                )
-                required_resources = {
-                    "Localizable.strings",
-                    "InfoPlist.strings",
-                    "InterfaceFallback.strings",
-                }
-                missing = sorted(required_resources - set(resources))
-                if missing:
-                    fail(
-                        "embedded SideStore zh-Hans resources are missing: "
-                        + ", ".join(missing)
-                    )
-                if len(resources) < 7:
-                    fail(
-                        "embedded SideStore zh-Hans resource count is below 7: "
-                        f"{len(resources)}"
-                    )
+                for language in ["zh-Hans", "zh-Hant"]:
+                    localization_root = framework / f"{language}.lproj"
+                    if not localization_root.is_dir():
+                        fail(f"embedded SideStore {language}.lproj is missing")
+                    resources = {item.name for item in localization_root.iterdir() if item.is_file()}
+                    required_resources = {"Localizable.strings", "InfoPlist.strings",
+                                          "InterfaceFallback.strings", "CombinedLocalizable.strings"}
+                    missing = sorted(required_resources - resources)
+                    if missing:
+                        fail(f"embedded SideStore {language} resources are missing: " + ", ".join(missing))
+                    if len(resources) < 8:
+                        fail(f"embedded SideStore {language} resource count is below 8: {len(resources)}")
+                require_file(framework, "en.lproj/CombinedLocalizable.strings", "SideStore English recovery fallback")
+                for language in ["en", "zh-Hans", "zh-Hant"]:
+                    require_file(app, f"Frameworks/SideStoreSupport.framework/{language}.lproj/RefreshLocalizable.strings",
+                                 f"refresh coordinator {language} translations")
 
             result = {
                 "ipa": str(args.ipa),

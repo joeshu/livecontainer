@@ -15,7 +15,7 @@
     dispatch_once(&onceToken, ^{
         NSString *language = @"en";
         NSString *path = [[NSUserDefaults lcMainBundle] pathForResource:language ofType:@"lproj"];
-        enBundle = [NSBundle bundleWithPath:path];
+        enBundle = path ? [NSBundle bundleWithPath:path] : nil;
     });
     return enBundle;
 }
@@ -37,14 +37,17 @@
     }
 }
 
-// Instance method for localization with format
-- (NSString *)localizeWithFormat:(NSString*)arg1, ... {
-    va_list args;
-    va_start(args, arg1);
-    NSString *formattedString = [NSString localizedStringWithFormat:[self localized], arg1, args];
-//    NSString *formattedString = [[NSString alloc] localized:[self localized] arguments:arg1, args];
-    va_end(args);
-    return formattedString;
+// The format is a fixed parameter; va_list therefore contains every value.
+// Swift callers use String.localizeWithFormat(_:), which expands its array via
+// Foundation's arguments initializer rather than passing an array as one value.
++ (NSString *)lcLocalizedStringWithFormat:(NSString *)format, ... {
+    va_list arguments;
+    va_start(arguments, format);
+    NSString *result = [[NSString alloc] initWithFormat:format.localized
+                                                locale:NSLocale.currentLocale
+                                             arguments:arguments];
+    va_end(arguments);
+    return result;
 }
 
 @end
