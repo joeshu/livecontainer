@@ -11,7 +11,7 @@ index 530dc557..2f17a945 100644
                      </connections>
                  </viewController>
 diff --git a/AltStore/Authentication/ResignAltStoreViewController.swift b/AltStore/Authentication/ResignAltStoreViewController.swift
-index 959dfe40..ba676d14 100644
+index 959dfe40..90bf7d6e 100644
 --- a/AltStore/Authentication/ResignAltStoreViewController.swift
 +++ b/AltStore/Authentication/ResignAltStoreViewController.swift
 @@ -18,13 +18,21 @@ final class ResignAltStoreViewController: UIViewController
@@ -146,7 +146,42 @@ index 959dfe40..ba676d14 100644
          reasonTextLabel.numberOfLines = 0
          
          // Horizontal Container for key-value layout
-@@ -150,11 +188,11 @@ private extension ResignAltStoreViewController
+@@ -113,6 +151,34 @@ final class ResignAltStoreViewController: UIViewController
+         
+         self.placeholderView.stackView.setCustomSpacing(20, after: self.placeholderView.detailTextLabel)
+         self.placeholderView.stackView.setCustomSpacing(15, after: separator)
++
++        #if !os(tvOS)
++        // The old placeholder centered long text behind the fixed action bar.
++        // Constrain a scrolling content area above the actions for small screens
++        // and accessibility text sizes, keeping both actions reachable.
++        let content = self.placeholderView.stackView!
++        let actionBar = self.reinstallButton.superview!
++        content.removeFromSuperview()
++        content.alignment = .fill
++        content.distribution = .fill
++        self.placeholderView.isHidden = true
++        let scrollView = UIScrollView()
++        scrollView.translatesAutoresizingMaskIntoConstraints = false
++        scrollView.contentInsetAdjustmentBehavior = .never
++        self.view.insertSubview(scrollView, belowSubview: actionBar)
++        scrollView.addSubview(content)
++        NSLayoutConstraint.activate([
++            scrollView.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor),
++            scrollView.leadingAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.leadingAnchor),
++            scrollView.trailingAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.trailingAnchor),
++            scrollView.bottomAnchor.constraint(equalTo: actionBar.topAnchor, constant: -12),
++            content.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 16),
++            content.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -16),
++            content.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 24),
++            content.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -24),
++            content.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -48)
++        ])
++        #endif
+     }
+ }
+ 
+@@ -150,11 +216,11 @@ private extension ResignAltStoreViewController
                              return
                          }
                          

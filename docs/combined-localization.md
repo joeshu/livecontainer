@@ -51,7 +51,9 @@ Recovery copy distinguishes expiration, revocation, account/team changes and
 missing keys. Creating a certificate for a free account explicitly warns about
 revoking the previous certificate. Combined reinstall instructions say to keep
 extensions and install over the existing app. Expiry dates identify the host
-being signed. Recovery labels support multiline text and Dynamic Type.
+being signed. Recovery labels support multiline text and Dynamic Type. On iOS, the recovery
+content scrolls above a fixed action bar, so long warnings and large text do not
+cover the reinstall and later buttons.
 
 Traditional Chinese legacy resources started from value-only OpenCC conversion,
 followed by terminology corrections; resource IDs, English keys and placeholders
