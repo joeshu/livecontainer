@@ -1,3 +1,4 @@
+#include <unistd.h>
 //
 //  main.m
 //  LiveProcess
@@ -116,8 +117,17 @@ int LiveProcessMain(int argc, char *argv[]) {
 
         NSXPCConnection* connection = [[NSXPCConnection alloc] initWithListenerEndpoint:endpoint];
         connection.remoteObjectInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
+        // This built-in SideStore worker belongs to one coordinator. If the
+        // coordinator disappears, retire this process rather than leaving an
+        // orphan refresh holding the worker lease indefinitely. An installation
+        // already accepted by iOS may still finish outside this process.
         connection.interruptionHandler = ^{
-            NSLog(@"interrupted!!!");
+            NSLog(@"[LiveProcess] Refresh coordinator interrupted; stopping worker.");
+            _exit(0);
+        };
+        connection.invalidationHandler = ^{
+            NSLog(@"[LiveProcess] Refresh coordinator invalidated; stopping worker.");
+            _exit(0);
         };
         
         [connection activate];

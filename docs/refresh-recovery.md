@@ -24,7 +24,10 @@ removed, so another process cannot lock a different inode under the same name.
 LiveProcess holds a separate worker lease around the actual intent. Recovery and
 new attempts probe both leases: a living extension remains protected after its
 coordinator dies. The worker validates the active task ID and refreshing phase
-under its lease, rejecting stale RPCs before calling any signing work. Probe
+under its lease, rejecting stale RPCs before calling any signing work. The
+built-in worker exits when its coordinator XPC connection is interrupted or
+invalidated, releasing its lease instead of waiting indefinitely for a reply.
+Probe
 leases span journal replacement so ID validation cannot race with a new attempt.
 
 The Settings section shows starting, refreshing and last-result states plus
