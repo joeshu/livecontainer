@@ -182,8 +182,14 @@ class RefreshHandler: NSObject {
                 self?.processFailed(generation: generation, message: RefreshLocalization.text("refresh.quit", default: "Built-in SideStore quit unexpectedly"))
             }
         }
+        guard let journalDirectory = journal?.directory,
+              let journalBookmark = bookmarkForURL(journalDirectory) else {
+            throw failure(5, RefreshLocalization.text("refresh.bookmark", default: "Unable to create a security-scoped bookmark for SideStore."))
+        }
         let item = NSExtensionItem()
-        item.userInfo = ["selected": "builtinSideStore", "bookmarks": [bookmark], "endpoint": listener.endpoint]
+        item.userInfo = ["selected": "builtinSideStore", "bookmarks": [bookmark, journalBookmark],
+                         "refreshJournalPath": journalDirectory.path, "sideStoreContainerPath": homeURL.path,
+                         "endpoint": listener.endpoint]
         // The operation is already registered. Readiness is latched even if the
         // didFinishLaunching signal arrives before beginRequest returns.
         Task {

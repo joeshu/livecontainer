@@ -11,7 +11,10 @@ SideStore continue using SideStore's existing state handling.
 Before launching an extension, the bridge acquires a nonblocking `flock` lease
 and saves the launching stage. It saves the refreshing stage before sending the
 refresh RPC. The lease spans the task, including process teardown on failure.
-Both ordinary completion and cancellation release it. Concurrent bridge tasks
+Both ordinary completion and cancellation release it. The host passes a dedicated
+security-scoped bookmark for the journal directory to LiveProcess. Its resolved
+path is validated against granted bookmarks and used explicitly; the worker
+never guesses the host location using its own extension HOME. Concurrent bridge tasks
 in different processes are rejected with the existing busy message.
 
 A process death releases the lease in the kernel. On the next host/guest launch,

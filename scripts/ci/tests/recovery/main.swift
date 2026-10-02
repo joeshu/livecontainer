@@ -31,6 +31,26 @@ if CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "hold" {
 let root = FileManager.default.temporaryDirectory.appendingPathComponent("refresh-journal-tests-\(UUID().uuidString)")
 try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
 defer { try? FileManager.default.removeItem(at: root) }
+// Production factories must not confuse the worker's extension HOME with the
+// host's journal. A missing explicitly scoped path fails closed.
+let originalHome = ProcessInfo.processInfo.environment["LC_HOME_PATH"]
+let originalJournalPath = ProcessInfo.processInfo.environment["LC_REFRESH_JOURNAL_PATH"]
+defer {
+    if let originalHome { setenv("LC_HOME_PATH", originalHome, 1) } else { unsetenv("LC_HOME_PATH") }
+    if let originalJournalPath { setenv("LC_REFRESH_JOURNAL_PATH", originalJournalPath, 1) } else { unsetenv("LC_REFRESH_JOURNAL_PATH") }
+}
+setenv("LC_HOME_PATH", root.appendingPathComponent("host").path, 1)
+let hostJournal = try RefreshRecovery.makeJournal()
+setenv("LC_REFRESH_JOURNAL_PATH", hostJournal.directory.path, 1)
+setenv("LC_HOME_PATH", root.appendingPathComponent("extension").path, 1)
+require(try RefreshRecovery.makeWorkerJournal().directory.path == hostJournal.directory.path,
+        "Worker must use the explicitly scoped host journal despite its different home")
+unsetenv("LC_REFRESH_JOURNAL_PATH")
+do {
+    _ = try RefreshRecovery.makeWorkerJournal()
+    fatalError("Missing worker access must not silently choose a private extension journal")
+} catch {}
+
 let start = Date(timeIntervalSince1970: 1_700_000_000)
 let owner = RefreshTaskJournal(directory: root.appendingPathComponent("normal"))
 try owner.begin(taskID: "A", now: start)

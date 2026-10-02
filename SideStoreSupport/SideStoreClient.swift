@@ -100,7 +100,7 @@ struct SideStoreIntentCaller {
             do {
                 // Parent death must not permit another process to overlap this
                 // operation. Reject an old RPC before invoking any signing work.
-                workerLease = try RefreshRecovery.makeJournal().claimWorker(taskID: taskID)
+                workerLease = try RefreshRecovery.makeWorkerJournal().claimWorker(taskID: taskID)
                 try await SideStoreIntentCaller.shared.callRefreshIntent2(identifier: identifier, mangledTypeName: mangledTypeName) { progress in
                     obs = progress.observe(\.fractionCompleted, options: [.new]) { progress, change in
                         if let newValue = change.newValue {

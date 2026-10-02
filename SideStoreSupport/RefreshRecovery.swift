@@ -13,6 +13,16 @@ public final class RefreshRecovery: NSObject {
             .appendingPathComponent("Library/Application Support/LiveContainerRefresh", isDirectory: true))
     }
 
+    /// LiveProcess has its own HOME. Only use the journal directory whose
+    /// security-scoped bookmark was resolved by its extension bootstrap.
+    static func makeWorkerJournal() throws -> RefreshTaskJournal {
+        guard let pointer = getenv("LC_REFRESH_JOURNAL_PATH"),
+              let path = String(validatingUTF8: pointer), !path.isEmpty else {
+            throw NSError(domain: "LCRefreshRecovery", code: 2)
+        }
+        return RefreshTaskJournal(directory: URL(fileURLWithPath: path, isDirectory: true))
+    }
+
     @objc public static func recoverOnLaunch() {
         DispatchQueue.main.async { _ = snapshot() }
     }

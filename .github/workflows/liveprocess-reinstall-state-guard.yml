@@ -22,8 +22,10 @@ jobs:
           "$RUNNER_TEMP/refresh-tests"
       - name: Run durable refresh recovery regressions
         run: |
-          swiftc SideStoreSupport/RefreshTaskJournal.swift scripts/ci/tests/recovery/main.swift -o "$RUNNER_TEMP/refresh-recovery-tests"
+          swiftc SideStoreSupport/RefreshTaskJournal.swift SideStoreSupport/RefreshRecovery.swift scripts/ci/tests/recovery/main.swift -o "$RUNNER_TEMP/refresh-recovery-tests"
           "$RUNNER_TEMP/refresh-recovery-tests"
+          clang -fobjc-arc -framework Foundation -I LiveProcess scripts/ci/tests/recovery/DirectoryAccess.m -o "$RUNNER_TEMP/refresh-directory-tests"
+          "$RUNNER_TEMP/refresh-directory-tests"
       - name: Run combined source and package regressions
         run: python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
       - name: Checkout pinned SideStore contract
