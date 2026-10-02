@@ -25,7 +25,7 @@ app names and other model text are not passed through unrestricted catalog looku
 
 Refresh coordinator errors use a separate `RefreshLocalizable` table owned by
 SideStoreSupport and follow the containing app's language. Shortcut labels and
-success text are included in the host string catalog. All 345 current host keys
+success text are included in the host string catalog. All current host keys
 now include both Chinese scripts; previously missing storage, signing, emulator
 and sharing copy was filled, and misleading Team ID / temporary-file wording
 was corrected. Technical errors supplied

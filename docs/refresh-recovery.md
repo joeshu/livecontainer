@@ -19,8 +19,13 @@ or when the Settings refresh-status section is displayed, recovery acquires
 this lease before examining the journal. A saved active attempt with no living
 owner is changed to interrupted and cleared from the active slot. A living
 owner is never recovered merely because its timestamp is old. Task IDs prevent
-stale completions from releasing another task's lease. The lock file is never
+stale completions from releasing another task's lease. The lock files are never
 removed, so another process cannot lock a different inode under the same name.
+LiveProcess holds a separate worker lease around the actual intent. Recovery and
+new attempts probe both leases: a living extension remains protected after its
+coordinator dies. The worker validates the active task ID and refreshing phase
+under its lease, rejecting stale RPCs before calling any signing work. Probe
+leases span journal replacement so ID validation cannot race with a new attempt.
 
 The Settings section shows starting, refreshing and last-result states plus
 start time, with English, Simplified Chinese and Traditional Chinese copy.
@@ -46,7 +51,8 @@ all storage-device or sudden-power-loss behavior.
 
 CI compiles the production journal and kills real subprocess owners during both
 launching and refreshing. It verifies living-owner protection across processes,
-concurrent rejection, stale callbacks, idempotent recovery, retriable leases,
+concurrent rejection, a living orphan worker after coordinator death, stale RPCs
+and callbacks, idempotent recovery, retriable leases,
 terminal results, corrupt-record quarantine, forward-schema protection and an
 actual failed atomic completion write. Full Xcode/IPA checks cover integration.
 Device QA must still cover iOS suspension, lock-screen behavior, extension

@@ -5,6 +5,36 @@ import Darwin
 import Glibc
 #endif
 
+/// A separate worker lease survives the coordinator's death when its extension
+/// is still executing. It is acquired before validating the task ID and held
+/// until the actual intent returns. Never unlink its lock file either.
+final class RefreshWorkerLease {
+    private var descriptor: Int32
+    private init(descriptor: Int32) { self.descriptor = descriptor }
+    deinit { release() }
+
+    static func acquire(directory: URL) throws -> RefreshWorkerLease? {
+        let descriptor = open(directory.appendingPathComponent("worker.lock").path,
+                              O_CREAT | O_RDWR | O_CLOEXEC, mode_t(0o600))
+        guard descriptor >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        if flock(descriptor, LOCK_EX | LOCK_NB) != 0 {
+            let code = errno
+            close(descriptor)
+            if code == EWOULDBLOCK || code == EAGAIN { return nil }
+            throw NSError(domain: NSPOSIXErrorDomain, code: Int(code))
+        }
+        return RefreshWorkerLease(descriptor: descriptor)
+    }
+
+    func release() {
+        if descriptor >= 0 {
+            flock(descriptor, LOCK_UN)
+            close(descriptor)
+            descriptor = -1
+        }
+    }
+}
+
 /// Serialize access on the caller's queue. A kernel lease spans the operation;
 /// unlike a PID or a wall-clock timeout, it cannot mistake a living owner for a
 /// crashed one and is released automatically when the process terminates.
@@ -125,6 +155,8 @@ final class RefreshTaskJournal {
     func recoverAndRead(now: Date = Date()) throws -> Record {
         guard try acquire() else { return try read() }
         defer { release() }
+        guard let worker = try RefreshWorkerLease.acquire(directory: directory) else { return try read() }
+        defer { worker.release() }
         let previous = try readForRecovery()
         let next = recovered(previous, now: now)
         if previous.active != nil { try write(next) }
@@ -135,12 +167,30 @@ final class RefreshTaskJournal {
         guard !taskID.isEmpty else { throw JournalError.invalidRecord }
         guard try acquire() else { throw JournalError.busy }
         do {
+            guard let worker = try RefreshWorkerLease.acquire(directory: directory) else { throw JournalError.busy }
+            defer { worker.release() }
             let previous = try readForRecovery()
             var next = recovered(previous, now: now)
             next.active = Attempt(taskID: taskID, startedAt: now, stage: .launching, stageStartedAt: now)
             try write(next)
         } catch {
             release()
+            throw error
+        }
+    }
+
+    /// Called in LiveProcess. Holding the worker lock makes the ID check atomic
+    /// against a coordinator starting a new task or recovering an abandoned one.
+    func claimWorker(taskID: String) throws -> RefreshWorkerLease {
+        guard let worker = try RefreshWorkerLease.acquire(directory: directory) else { throw JournalError.busy }
+        do {
+            let current = try read()
+            guard current.active?.taskID == taskID, current.active?.stage == .refreshing else {
+                throw JournalError.wrongTask
+            }
+            return worker
+        } catch {
+            worker.release()
             throw error
         }
     }

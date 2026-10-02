@@ -9,6 +9,17 @@ func require(_ condition: Bool, _ message: String) {
     precondition(condition, message)
 }
 
+if CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "worker" {
+    let journal = RefreshTaskJournal(directory: URL(fileURLWithPath: CommandLine.arguments[2]))
+    let worker = try journal.claimWorker(taskID: "killed-task")
+    FileHandle.standardOutput.write(Data("READY\n".utf8))
+    while true {
+        sleep(1)
+        // Keep the lease alive across the simulated worker's operation.
+        withExtendedLifetime(worker) {}
+    }
+}
+
 if CommandLine.arguments.count > 1 && CommandLine.arguments[1] == "hold" {
     let journal = RefreshTaskJournal(directory: URL(fileURLWithPath: CommandLine.arguments[2]))
     try journal.begin(taskID: "killed-task")
@@ -80,6 +91,44 @@ for stage in ["launching", "refreshing"] {
     try journal.finish(taskID: "retry", outcome: .success)
 }
 
+// The coordinator can die while the actual extension remains alive. A second
+// process must not clear its task or overlap its work until the worker exits.
+let workerDirectory = root.appendingPathComponent("orphan-worker")
+let coordinator = Process()
+let coordinatorOutput = Pipe()
+coordinator.executableURL = URL(fileURLWithPath: CommandLine.arguments[0])
+coordinator.arguments = ["hold", workerDirectory.path, "refreshing"]
+coordinator.standardOutput = coordinatorOutput
+try coordinator.run()
+require(try coordinatorOutput.fileHandleForReading.read(upToCount: 6) == Data("READY\n".utf8), "Coordinator must be ready")
+let worker = Process()
+let workerOutput = Pipe()
+worker.executableURL = coordinator.executableURL
+worker.arguments = ["worker", workerDirectory.path]
+worker.standardOutput = workerOutput
+try worker.run()
+require(try workerOutput.fileHandleForReading.read(upToCount: 6) == Data("READY\n".utf8), "Worker must hold its independent lease")
+kill(coordinator.processIdentifier, SIGKILL)
+coordinator.waitUntilExit()
+let workerObserver = RefreshTaskJournal(directory: workerDirectory)
+require(try workerObserver.recoverAndRead().active?.taskID == "killed-task", "A live extension must remain protected after coordinator death")
+do {
+    try workerObserver.begin(taskID: "overlap")
+    fatalError("Do not overlap a living orphan worker")
+} catch RefreshTaskJournal.JournalError.busy {}
+kill(worker.processIdentifier, SIGKILL)
+worker.waitUntilExit()
+require(try workerObserver.recoverAndRead().lastCompletion?.outcome == .interrupted, "Recover only after both owners have exited")
+try workerObserver.begin(taskID: "new-task")
+try workerObserver.markRefreshing(taskID: "new-task")
+do {
+    _ = try workerObserver.claimWorker(taskID: "killed-task")
+    fatalError("A late RPC must not invoke an old operation")
+} catch RefreshTaskJournal.JournalError.wrongTask {}
+let newWorker = try workerObserver.claimWorker(taskID: "new-task")
+newWorker.release()
+try workerObserver.finish(taskID: "new-task", outcome: .success)
+
 // A damaged record is quarantined, but unknown newer schemas are retained.
 let damaged = RefreshTaskJournal(directory: root.appendingPathComponent("damaged"))
 _ = try damaged.recoverAndRead()
@@ -114,4 +163,4 @@ let retry = RefreshTaskJournal(directory: unwritable.directory)
 require(try retry.recoverAndRead().lastCompletion?.outcome == .interrupted, "Failed completion persistence must release its lease and retain an unconfirmed result")
 try retry.begin(taskID: "after-write-failure")
 try retry.finish(taskID: "after-write-failure", outcome: .success)
-print("PASS: real process death in both phases, live-owner isolation, stale completion, outcomes, corruption, schema protection and I/O recovery")
+print("PASS: real process death in both phases, orphan-worker isolation, stale RPC rejection, outcomes, corruption, schema protection and I/O recovery")
