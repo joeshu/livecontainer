@@ -12,6 +12,10 @@
 #import "../../ZSign/zsigner.h"
 #import "LiveContainerSwiftUI-Swift.h"
 
+@interface NSObject (LCRefreshRecoveryStatus)
++ (NSDictionary *)snapshot;
+@end
+
 // make SFSafariView happy and open data: URLs
 @implementation NSURL(hack)
 - (BOOL)safari_isHTTPFamilyURL {
@@ -21,6 +25,11 @@
 @end
 
 @implementation LCUtils
+
++ (NSDictionary<NSString *, id> *)refreshRecoveryStatus {
+    Class recovery = NSClassFromString(@"LCRefreshRecovery");
+    return [recovery respondsToSelector:@selector(snapshot)] ? [recovery snapshot] : nil;
+}
 
 static void LCClearPendingGuestLaunchState(void) {
     NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;

@@ -10,3 +10,4 @@
 "refresh.client" = "The embedded SideStore XPC client is unavailable.";
 "refresh.start_timeout" = "Built-in SideStore failed to start in reasonable time";
 "refresh.timeout" = "SideStore refresh timed out.";
+"refresh.persistence" = "Unable to save refresh state. Unlock the device and check available storage before retrying.";

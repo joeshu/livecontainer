@@ -71,6 +71,7 @@ public struct RefreshAllAppsIntent: AppIntent, CustomIntentMigratedAppIntent, Pr
 class RefreshHandler: NSObject {
     static let shared = RefreshHandler()
     private let state = RefreshTaskState()
+    private var journal: RefreshTaskJournal?
     private var continuation: CheckedContinuation<Void, any Error>?
     private var progress: Progress?
     private var timeout: DispatchWorkItem?
@@ -117,7 +118,23 @@ class RefreshHandler: NSObject {
         if sideStorePid <= 0 || getpgid(sideStorePid) < 0 {
             tearDownProcess()
         }
-        guard state.begin(taskID: taskID) else { return }
+        do {
+            let journal = try RefreshRecovery.makeJournal()
+            try journal.begin(taskID: taskID)
+            self.journal = journal
+        } catch RefreshTaskJournal.JournalError.busy {
+            continuation.resume(throwing: failure(2, RefreshLocalization.text("refresh.busy", default: "Another refresh task is in progress.")))
+            return
+        } catch {
+            continuation.resume(throwing: failure(10, RefreshLocalization.text("refresh.persistence", default: "Unable to save refresh state. Unlock the device and check available storage before retrying.")))
+            return
+        }
+        guard state.begin(taskID: taskID) else {
+            try? journal?.finish(taskID: taskID, outcome: .cancelled)
+            journal = nil
+            continuation.resume(throwing: CancellationError())
+            return
+        }
         self.continuation = continuation
         self.progress = progress
         self.identifier = identifier
@@ -225,6 +242,13 @@ class RefreshHandler: NSObject {
 
     private func sendRefreshIfReady() {
         guard let client, let taskID = state.beginRefreshIfReady() else { return }
+        do {
+            guard let journal else { throw RefreshTaskJournal.JournalError.noLease }
+            try journal.markRefreshing(taskID: taskID)
+        } catch {
+            complete(taskID: taskID, result: .failure(failure(10, RefreshLocalization.text("refresh.persistence", default: "Unable to save refresh state. Unlock the device and check available storage before retrying."))), resetProcess: true)
+            return
+        }
         armTimeout(taskID: taskID, phase: .refreshing)
         client.refreshAllApps(withIdentifier: identifier, mangledTypeName: mangledName, taskID: taskID)
     }
@@ -268,6 +292,29 @@ class RefreshHandler: NSObject {
         self.continuation = nil
         progress = nil
         if resetProcess { tearDownProcess() }
+        // Retire the extension before releasing the cross-process lease. Never
+        // replay an interrupted operation: iOS may have accepted an installation.
+        let outcome: RefreshTaskJournal.Outcome
+        let recordedError: NSError?
+        switch result {
+        case .success:
+            outcome = .success
+            recordedError = nil
+        case .failure(let error):
+            recordedError = error as NSError
+            outcome = error is CancellationError ||
+                (recordedError?.domain == NSCocoaErrorDomain && recordedError?.code == NSUserCancelledError) ? .cancelled : .failure
+        }
+        do {
+            try journal?.finish(taskID: taskID, outcome: outcome, error: recordedError)
+        } catch {
+            // Preserve the actual refresh result. If completion cannot be saved,
+            // the next launch reports it as unconfirmed rather than inventing a
+            // success or repeating an installation automatically.
+            let error = error as NSError
+            NSLog("[LCRefreshRecovery] Completion persistence failed (%@, %ld)", error.domain, error.code)
+        }
+        journal = nil
         continuation?.resume(with: result)
     }
 

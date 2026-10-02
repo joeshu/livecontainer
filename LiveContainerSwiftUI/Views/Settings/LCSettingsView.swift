@@ -33,6 +33,7 @@ enum JITEnablerType : Int, CaseIterable, Identifiable {
 }
 
 struct LCSettingsView: View {
+    @State private var refreshStatus: [String: Any] = [:]
     @State var errorShow = false
     @State var errorInfo = ""
     @State var successShow = false
@@ -308,6 +309,10 @@ struct LCSettingsView: View {
                     Text("lc.settings.warning".loc)
                 }
                 
+                if !refreshStatus.isEmpty {
+                    LCRefreshRecoverySection(status: refreshStatus)
+                }
+
                 VStack{
                     Text(LCUtils.getVersionInfo())
                         .foregroundStyle(.gray)
@@ -378,6 +383,16 @@ struct LCSettingsView: View {
                 }
             }
             .navigationBarTitle("lc.tabView.settings".loc)
+            .task {
+                while !Task.isCancelled {
+                    let next = LCUtils.refreshRecoveryStatus() ?? [:]
+                    if !(refreshStatus as NSDictionary).isEqual(next as NSDictionary) {
+                        refreshStatus = next
+                    }
+                    do { try await Task.sleep(nanoseconds: 5_000_000_000) }
+                    catch { return }
+                }
+            }
             .alert("lc.common.error".loc, isPresented: $errorShow){
             } message: {
                 Text(errorInfo)

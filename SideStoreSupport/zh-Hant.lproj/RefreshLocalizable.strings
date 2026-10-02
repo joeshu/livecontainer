@@ -10,3 +10,4 @@
 "refresh.client" = "無法連線內建 SideStore，請重新開啟 LiveContainer 後重試。";
 "refresh.start_timeout" = "內建 SideStore 啟動逾時，請重試。";
 "refresh.timeout" = "SideStore 刷新逾時，請檢查網路和 VPN 連線後重試。";
+"refresh.persistence" = "無法儲存刷新狀態。請解鎖裝置並檢查可用儲存空間後重試。";
