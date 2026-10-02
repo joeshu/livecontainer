@@ -44,10 +44,12 @@ def verify(root):
             assert arguments(value) == arguments(hant[key]), f'{src.name}/{key}: traditional format mismatch'
     info = plistlib.loads((root / 'AltStore/Info.plist').read_bytes())
     assert 'zh-Hant' in info['CFBundleLocalizations'], 'Traditional language missing in Info.plist'
-    for source in ['AltStore/Authentication/ResignAltStoreViewController.swift', 'AltStore/Settings/SettingsViewController.swift', 'SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift']:
-        text = (root / source).read_text()
-        for key in re.findall(r'SideStoreLocalization\.(?:text|format)\("([^"]+)"', text):
-            assert key in english, f'{source}: missing stable key {key}'
+    # Audit every explicit module-owned call, including new SwiftUI settings.
+    # Do not infer translatable text from arbitrary model strings.
+    for folder in ['AltStore', 'SideStore']:
+        for source in (root / folder).rglob('*.swift'):
+            for key in re.findall(r'SideStoreLocalization\.(?:text|format)\("([^"\n]+)"', source.read_text()):
+                assert key in english, f'{source}: missing stable key {key}'
     host = Path(__file__).resolve().parents[2]
     refresh = {lang: parse(host / 'SideStoreSupport' / f'{lang}.lproj' / 'RefreshLocalizable.strings')
                for lang in ['en', 'zh-Hans', 'zh-Hant']}

@@ -471,10 +471,10 @@ index 743d31cd..dae5bb62 100644
          present(alertController, animated: true)
 diff --git a/AltStore/en.lproj/CombinedLocalizable.strings b/AltStore/en.lproj/CombinedLocalizable.strings
 new file mode 100644
-index 00000000..3bd27ded
+index 00000000..31f82220
 --- /dev/null
 +++ b/AltStore/en.lproj/CombinedLocalizable.strings
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,60 @@
 +/* Stable keys for language preferences and signature recovery. */
 +"language.follow_system" = "Follow System";
 +"language.choose" = "SideStore Language";
@@ -506,12 +506,41 @@ index 00000000..3bd27ded
 +"signing.reason.profile" = "SideStore’s provisioning profile is missing or invalid.";
 +"signing.reason.certificate" = "SideStore’s installed signing certificate could not be read.";
 +"package.invalid_combined" = "The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions.";
++
++/* Static certificate and account interface copy; model values remain unchanged. */
++"cert.active_section" = "Active Local Certificate";
++"cert.active" = "Active Signing Certificate";
++"cert.serial_prefix" = "SN: ";
++"cert.third_party" = "Custom third-party certificate (different team)";
++"cert.reveal" = "Reveal Details";
++"cert.hide" = "Hide Details";
++"cert.copy_serial" = "Copy S/N";
++"cert.deactivate" = "Deactivate Locally";
++"cert.empty_import" = "No active local certificate found.Import a .p12 file to sign your apps.";
++"cert.empty_create" = "No active local certificate found.Create a new certificate or import a .p12 file to sign your apps.";
++"key.paste" = "Paste your PEM-formatted private key below, or import it from a text file.";
++"key.import_pem" = "Import PEM Private Key File";
++"key.import_file" = "Import from File";
++"key.add_pem" = "Add PEM Key";
++"key.add" = "Add Private Key";
++"common.done" = "Done";
++"common.ok" = "OK";
++"key.added" = "Key Added";
++"account.keep_certificate" = "Keep signing certificate";
++"account.keep_anisette" = "Keep Anisette data";
++"cert.keep_local" = "Keep Local Certificate";
++"common.unknown" = "Unknown";
++"cert.serial" = "Serial: %@";
++"cert.expires" = "Expires: %@";
++"key.read_failed" = "Failed to read file: %@";
++"key.select_failed" = "Failed to select file: %@";
++"key.added_detail" = "Key was added to certificate %@ (SN: %@).";
 diff --git a/AltStore/zh-Hans.lproj/CombinedLocalizable.strings b/AltStore/zh-Hans.lproj/CombinedLocalizable.strings
 new file mode 100644
-index 00000000..d9b5ae66
+index 00000000..eec62353
 --- /dev/null
 +++ b/AltStore/zh-Hans.lproj/CombinedLocalizable.strings
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,60 @@
 +/* Stable keys for language preferences and signature recovery. */
 +"language.follow_system" = "跟随系统";
 +"language.choose" = "SideStore 语言";
@@ -543,6 +572,35 @@ index 00000000..d9b5ae66
 +"signing.reason.profile" = "SideStore 的描述文件缺失或无效。";
 +"signing.reason.certificate" = "无法读取 SideStore 当前安装使用的签名证书。";
 +"package.invalid_combined" = "安装包必须来自当前更新源，且为包含 LiveProcess 和小组件扩展的 LiveContainer+SideStore。";
++
++/* Static certificate and account interface copy; model values remain unchanged. */
++"cert.active_section" = "当前本地证书";
++"cert.active" = "当前签名证书";
++"cert.serial_prefix" = "序列号：";
++"cert.third_party" = "第三方证书（来自其他开发者团队）";
++"cert.reveal" = "显示详情";
++"cert.hide" = "隐藏详情";
++"cert.copy_serial" = "复制序列号";
++"cert.deactivate" = "停用本地证书";
++"cert.empty_import" = "没有可用的本地证书。请导入 .p12 文件以签名应用。";
++"cert.empty_create" = "没有可用的本地证书。请创建新证书或导入 .p12 文件以签名应用。";
++"key.paste" = "在下方粘贴 PEM 格式的私钥，或从文本文件导入。";
++"key.import_pem" = "导入 PEM 私钥文件";
++"key.import_file" = "从文件导入";
++"key.add_pem" = "添加 PEM 私钥";
++"key.add" = "添加私钥";
++"common.done" = "完成";
++"common.ok" = "好";
++"key.added" = "私钥已添加";
++"account.keep_certificate" = "保留签名证书";
++"account.keep_anisette" = "保留 Anisette 数据";
++"cert.keep_local" = "保留本地证书";
++"common.unknown" = "未知";
++"cert.serial" = "序列号：%@";
++"cert.expires" = "到期日期：%@";
++"key.read_failed" = "无法读取文件：%@";
++"key.select_failed" = "无法选择文件：%@";
++"key.added_detail" = "私钥已添加到证书 %@（序列号：%@）。";
 diff --git a/AltStore/zh-Hans.lproj/Localizable.strings b/AltStore/zh-Hans.lproj/Localizable.strings
 index a39a4bd1..a5317f54 100644
 --- a/AltStore/zh-Hans.lproj/Localizable.strings
@@ -590,10 +648,10 @@ index 00000000..b803abd5
 +"2N5-zd-fUj.normalTitle" = "登入";
 diff --git a/AltStore/zh-Hant.lproj/CombinedLocalizable.strings b/AltStore/zh-Hant.lproj/CombinedLocalizable.strings
 new file mode 100644
-index 00000000..614d3fda
+index 00000000..65173ebf
 --- /dev/null
 +++ b/AltStore/zh-Hant.lproj/CombinedLocalizable.strings
-@@ -0,0 +1,31 @@
+@@ -0,0 +1,60 @@
 +/* Stable keys for language preferences and signature recovery. */
 +"language.follow_system" = "跟隨系統";
 +"language.choose" = "SideStore 語言";
@@ -625,6 +683,35 @@ index 00000000..614d3fda
 +"signing.reason.profile" = "SideStore 的佈署描述檔缺失或無效。";
 +"signing.reason.certificate" = "無法讀取 SideStore 目前安裝使用的簽名憑證。";
 +"package.invalid_combined" = "安裝套件必須來自目前更新來源，且為包含 LiveProcess 和小工具擴充功能的 LiveContainer+SideStore。";
++
++/* Static certificate and account interface copy; model values remain unchanged. */
++"cert.active_section" = "目前本機憑證";
++"cert.active" = "目前簽名憑證";
++"cert.serial_prefix" = "序號：";
++"cert.third_party" = "第三方憑證（來自其他開發者團隊）";
++"cert.reveal" = "顯示詳細資訊";
++"cert.hide" = "隱藏詳細資訊";
++"cert.copy_serial" = "複製序號";
++"cert.deactivate" = "停用本機憑證";
++"cert.empty_import" = "沒有可用的本機憑證。請匯入 .p12 檔案以簽名應用。";
++"cert.empty_create" = "沒有可用的本機憑證。請建立新憑證或匯入 .p12 檔案以簽名應用。";
++"key.paste" = "在下方貼上 PEM 格式的私鑰，或從文字檔案匯入。";
++"key.import_pem" = "匯入 PEM 私鑰檔案";
++"key.import_file" = "從檔案匯入";
++"key.add_pem" = "加入 PEM 私鑰";
++"key.add" = "加入私鑰";
++"common.done" = "完成";
++"common.ok" = "好";
++"key.added" = "私鑰已加入";
++"account.keep_certificate" = "保留簽名憑證";
++"account.keep_anisette" = "保留 Anisette 資料";
++"cert.keep_local" = "保留本機憑證";
++"common.unknown" = "未知";
++"cert.serial" = "序號：%@";
++"cert.expires" = "到期日期：%@";
++"key.read_failed" = "無法讀取檔案：%@";
++"key.select_failed" = "無法選擇檔案：%@";
++"key.added_detail" = "私鑰已加入憑證 %@（序號：%@）。";
 diff --git a/AltStore/zh-Hant.lproj/InfoPlist.strings b/AltStore/zh-Hant.lproj/InfoPlist.strings
 new file mode 100644
 index 00000000..dfcf8b4e
@@ -1160,6 +1247,237 @@ index 2ecb61b7..8698d475 100644
          
          if self.context.bundleIdentifier == StoreApp.dolphinAppID, self.context.bundleIdentifier != appBundle.bundleIdentifier {
              if var infoPlist = NSDictionary(contentsOf: appBundle.bundle.infoPlistURL) as? [String: Any] {
+diff --git a/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift b/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift
+index b68bde1c..9c61fa52 100644
+--- a/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift
++++ b/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift
+@@ -15,7 +15,7 @@ struct ActiveCertSectionView: View {
+     var onDeactivate: () -> Void
+     
+     var body: some View {
+-        Section("Active Local Certificate") {
++        Section(SideStoreLocalization.text("cert.active_section", default: "Active Local Certificate")) {
+             if let activeSerial = viewModel.activeSerialNumber {
+                 HStack {
+                     Image(systemName: "checkmark.seal.fill")
+@@ -24,7 +24,7 @@ struct ActiveCertSectionView: View {
+                     
+                     VStack(alignment: .leading) {
+                         HStack(spacing: 6) {
+-                            Text("Active Signing Certificate").font(.headline)
++                            Text(SideStoreLocalization.text("cert.active", default: "Active Signing Certificate")).font(.headline)
+                             
+                             #if !os(tvOS)
+                             SwiftUI.Button {
+@@ -43,7 +43,7 @@ struct ActiveCertSectionView: View {
+                         
+                         let displaySerial = viewModel.displayActiveSerial(activeSerial)
+                         (
+-                            Text("SN: ").font(.footnote)
++                            Text(SideStoreLocalization.text("cert.serial_prefix", default: "SN: ")).font(.footnote)
+                             + Text(displaySerial).font(.system(size: 13, design: .monospaced))
+                         )
+                         .foregroundColor(.secondary)
+@@ -60,7 +60,7 @@ struct ActiveCertSectionView: View {
+                                 Image(systemName: "exclamationmark.triangle.fill")
+                                     .foregroundColor(.orange)
+                                     .font(.footnote)
+-                                Text("Custom third-party certificate (different team)")
++                                Text(SideStoreLocalization.text("cert.third_party", default: "Custom third-party certificate (different team)"))
+                                     .font(.caption)
+                                     .foregroundColor(.orange)
+                             }
+@@ -77,12 +77,12 @@ struct ActiveCertSectionView: View {
+                         if viewModel.revealedSerials.contains(key) { viewModel.revealedSerials.remove(key) }
+                         else { viewModel.revealedSerials.insert(key) }
+                     } label: {
+-                        Label(isMasked ? "Reveal Details" : "Hide Details",
++                        Label(isMasked ? SideStoreLocalization.text("cert.reveal", default: "Reveal Details") : SideStoreLocalization.text("cert.hide", default: "Hide Details"),
+                               systemImage: isMasked ? "eye" : "eye.slash")
+                     }
+                     #if !os(tvOS)
+                     SwiftUI.Button { UIPasteboard.general.string = activeSerial } label: {
+-                        Label("Copy S/N", systemImage: "doc.on.doc")
++                        Label(SideStoreLocalization.text("cert.copy_serial", default: "Copy S/N"), systemImage: "doc.on.doc")
+                     }
+                     #endif
+                 }
+@@ -90,13 +90,13 @@ struct ActiveCertSectionView: View {
+                 HStack {
+                     Image(systemName: "checkmark.seal.fill").font(.title2).opacity(0)
+                     SwiftUI.Button(role: .destructive) { onDeactivate() } label: {
+-                        Text("Deactivate Locally").fontWeight(.medium)
++                        Text(SideStoreLocalization.text("cert.deactivate", default: "Deactivate Locally")).fontWeight(.medium)
+                     }
+                 }
+             } else {
+                 Text(viewModel.team == nil
+-                     ? "No active local certificate found.Import a .p12 file to sign your apps."
+-                     : "No active local certificate found.Create a new certificate or import a .p12 file to sign your apps.")
++                     ? SideStoreLocalization.text("cert.empty_import", default: "No active local certificate found.Import a .p12 file to sign your apps.")
++                     : SideStoreLocalization.text("cert.empty_create", default: "No active local certificate found.Create a new certificate or import a .p12 file to sign your apps."))
+                     .foregroundColor(.secondary)
+                     .font(.subheadline)
+             }
+diff --git a/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift b/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift
+index 5e1e86ad..a91b3bb3 100644
+--- a/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift
++++ b/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift
+@@ -32,7 +32,7 @@ struct PrivateKeyTextInputView: View {
+                         .padding(.horizontal)
+                 }
+                 
+-                Text("Paste your PEM-formatted private key below, or import it from a text file.")
++                Text(SideStoreLocalization.text("key.paste", default: "Paste your PEM-formatted private key below, or import it from a text file."))
+                     .font(.subheadline)
+                     .foregroundColor(.secondary)
+                     .padding(.horizontal)
+@@ -57,7 +57,7 @@ struct PrivateKeyTextInputView: View {
+                         if let topVC = UIApplication.shared.topViewController() {
+                             TVWebFileTransferManager.shared.startImport(
+                                 acceptedExtensions: ["pem", "key", "txt"],
+-                                title: "Import PEM Private Key File",
++                                title: SideStoreLocalization.text("key.import_pem", default: "Import PEM Private Key File"),
+                                 presentingVC: topVC
+                             ) { fileURL in
+                                 guard let fileURL = fileURL else { return }
+@@ -67,13 +67,13 @@ struct PrivateKeyTextInputView: View {
+                                     isEditing = false
+                                     errorMessage = nil
+                                 } catch {
+-                                    errorMessage = "Failed to read file: \(error.localizedDescription)"
++                                    errorMessage = SideStoreLocalization.format("key.read_failed", default: "Failed to read file: %@", error.localizedDescription)
+                                 }
+                             }
+                         }
+                         #endif
+                     } label: {
+-                        Label("Import from File", systemImage: "doc.badge.plus")
++                        Label(SideStoreLocalization.text("key.import_file", default: "Import from File"), systemImage: "doc.badge.plus")
+                             .frame(maxWidth: .infinity)
+                             .padding(.vertical, 8)
+                     }
+@@ -92,7 +92,7 @@ struct PrivateKeyTextInputView: View {
+                             }
+                         }
+                     } label: {
+-                        Text("Add PEM Key")
++                        Text(SideStoreLocalization.text("key.add_pem", default: "Add PEM Key"))
+                             .frame(maxWidth: .infinity)
+                             .padding(.vertical, 8)
+                     }
+@@ -102,14 +102,14 @@ struct PrivateKeyTextInputView: View {
+                 .padding(.horizontal)
+                 .padding(.bottom)
+             }
+-            .navigationTitle("Add Private Key")
++            .navigationTitle(SideStoreLocalization.text("key.add", default: "Add Private Key"))
+             #if !os(tvOS)
+             .navigationBarTitleDisplayMode(.inline)
+             #endif
+             .toolbar {
+                 ToolbarItem(placement: .confirmationAction) {
+                     if isEditing {
+-                        SwiftUI.Button("Done") {
++                        SwiftUI.Button(SideStoreLocalization.text("common.done", default: "Done")) {
+                             isEditing = false
+                         }
+                     } else {
+@@ -138,20 +138,20 @@ struct PrivateKeyTextInputView: View {
+                             isEditing = false
+                             errorMessage = nil
+                         } catch {
+-                            errorMessage = "Failed to read file: \(error.localizedDescription)"
++                            errorMessage = SideStoreLocalization.format("key.read_failed", default: "Failed to read file: %@", error.localizedDescription)
+                         }
+                     }
+                 case .failure(let error):
+-                    errorMessage = "Failed to select file: \(error.localizedDescription)"
++                    errorMessage = SideStoreLocalization.format("key.select_failed", default: "Failed to select file: %@", error.localizedDescription)
+                 }
+             }
+             #endif
+-            .alert("Key Added", isPresented: $showSuccessAlert) {
+-                SwiftUI.Button("OK") {
++            .alert(SideStoreLocalization.text("key.added", default: "Key Added"), isPresented: $showSuccessAlert) {
++                SwiftUI.Button(SideStoreLocalization.text("common.ok", default: "OK")) {
+                     onCancel()
+                 }
+             } message: {
+-                Text("Key was added to certificate \(cert.name) (SN: \(cert.serialNumber)).")
++                Text(SideStoreLocalization.format("key.added_detail", default: "Key was added to certificate %@ (SN: %@).", cert.name, cert.serialNumber))
+             }
+         }
+     }
+diff --git a/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift b/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift
+index e2d6b48d..f8be8ec4 100644
+--- a/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift
++++ b/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift
+@@ -41,7 +41,7 @@ class RevokeAlertViewController: UIViewController {
+         keepLocalCheckboxButton.addTarget(self, action: #selector(toggleKeepLocalCheckbox), for: .touchUpInside)
+         
+         let label = UILabel()
+-        label.text = NSLocalizedString("Keep Local Certificate", comment: "")
++        label.text = SideStoreLocalization.text("cert.keep_local", default: "Keep Local Certificate")
+         label.font = .systemFont(ofSize: 14)
+         label.isUserInteractionEnabled = true
+         let tap = UITapGestureRecognizer(target: self, action: #selector(toggleKeepLocalCheckbox))
+diff --git a/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift b/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift
+index a7a7ca8e..9c8b13d9 100644
+--- a/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift
++++ b/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift
+@@ -82,20 +82,24 @@ class RevokeCertificatesAlertViewController: UIViewController {
+             titleLabel.text = "\(index + 1). \(certName)"
+             titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+             titleLabel.textColor = .label
+-            titleLabel.numberOfLines = 1
++            titleLabel.numberOfLines = 0
+ 
+             let serialLabel = UILabel()
+-            serialLabel.text = "Serial: \(cert.serialNumber)"
++            serialLabel.text = SideStoreLocalization.format("cert.serial", default: "Serial: %@", cert.serialNumber)
+             serialLabel.font = .systemFont(ofSize: 11, weight: .regular)
+             serialLabel.textColor = .secondaryLabel
+             serialLabel.numberOfLines = 1
+ 
+             let expLabel = UILabel()
+-            let expDate = cert.expiryDate != Date.distantPast ? ISO8601DateFormatter().string(from: cert.expiryDate) : "Unknown"
+-            expLabel.text = "Expires: \(expDate.prefix(10))"
++            let formatter = DateFormatter()
++            formatter.locale = SideStoreLocalization.locale
++            formatter.dateStyle = .medium
++            formatter.timeStyle = .none
++            let expDate = cert.expiryDate != Date.distantPast ? formatter.string(from: cert.expiryDate) : SideStoreLocalization.text("common.unknown", default: "Unknown")
++            expLabel.text = SideStoreLocalization.format("cert.expires", default: "Expires: %@", expDate)
+             expLabel.font = .systemFont(ofSize: 11, weight: .regular)
+             expLabel.textColor = .secondaryLabel
+-            expLabel.numberOfLines = 1
++            expLabel.numberOfLines = 0
+ 
+             detailStack.addArrangedSubview(titleLabel)
+             detailStack.addArrangedSubview(serialLabel)
+diff --git a/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift b/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift
+index 58924cd3..a56217d6 100644
+--- a/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift
++++ b/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift
+@@ -48,7 +48,7 @@ class SignOutAlertViewController: UIViewController {
+         certCheckboxButton.addTarget(self, action: #selector(toggleCertCheckbox), for: .touchUpInside)
+         
+         let certLabel = UILabel()
+-        certLabel.text = NSLocalizedString("Keep signing certificate", comment: "")
++        certLabel.text = SideStoreLocalization.text("account.keep_certificate", default: "Keep signing certificate")
+         certLabel.font = .systemFont(ofSize: 14)
+         certLabel.isUserInteractionEnabled = true
+         let certTap = UITapGestureRecognizer(target: self, action: #selector(toggleCertCheckbox))
+@@ -70,7 +70,7 @@ class SignOutAlertViewController: UIViewController {
+         anisetteCheckboxButton.addTarget(self, action: #selector(toggleAnisetteCheckbox), for: .touchUpInside)
+         
+         let anisetteLabel = UILabel()
+-        anisetteLabel.text = NSLocalizedString("Keep Anisette data", comment: "")
++        anisetteLabel.text = SideStoreLocalization.text("account.keep_anisette", default: "Keep Anisette data")
+         anisetteLabel.font = .systemFont(ofSize: 14)
+         anisetteLabel.isUserInteractionEnabled = true
+         let anisetteTap = UITapGestureRecognizer(target: self, action: #selector(toggleAnisetteCheckbox))
 diff --git a/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift b/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift
 index b679a97d..c6ec4a1b 100644
 --- a/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift

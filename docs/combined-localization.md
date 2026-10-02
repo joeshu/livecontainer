@@ -61,6 +61,13 @@ were preserved. This is a baseline, not a claim of complete human review of all
 legacy pages. The critical recovery and language-setting copy was reviewed
 separately. Future translation changes should be reviewed in context.
 
+The active-certificate section, PEM import screen, logout retention options and
+certificate-revocation list use explicit module-owned keys. Certificate names,
+serials, account data, imported private keys and dependency error details remain
+unchanged; only the application's template around these values is translated.
+Revocation expiry dates follow the selected display language and current region.
+This scope does not attempt to translate arbitrary app, source or file content.
+
 ## Validation
 
 CI applies the complete patch to the pinned SideStore revision, runs the existing

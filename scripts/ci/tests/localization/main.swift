@@ -27,8 +27,20 @@ for language in ["en", "zh-Hans", "zh-Hant"] {
     let expected = ["en": "Update Signature", "zh-Hans": "更新签名", "zh-Hant": "更新簽名"][language]!
     expect(result == expected, "Resource lookup failed for \(language): \(result)")
 }
+// Translate the software-owned template, preserving values that happen to
+// match interface text, punctuation, Unicode and literal percent characters.
+for language in ["en", "zh-Hans", "zh-Hant"] {
+    let template = LocalizedResourceLookup.text(bundle: bundle, language: language,
+        key: "key.added_detail", fallback: "MISSING", table: "CombinedLocalizable")
+    let name = "Settings / 憑證 100%"
+    let serial = "00AB-My Apps"
+    let rendered = String(format: template, arguments: [name, serial])
+    expect(rendered.contains(name) && rendered.contains(serial), "Certificate model values changed")
+    let expected = ["en": "Key was added to certificate", "zh-Hans": "私钥已添加到证书", "zh-Hant": "私鑰已加入憑證"][language]!
+    expect(rendered.hasPrefix(expected), "Certificate template lookup failed")
+}
 expect(LocalizedResourceLookup.text(bundle: bundle, language: "fr", key: "signing.title", fallback: "MISSING", table: "CombinedLocalizable") == "Update Signature", "Missing language must use English")
 expect(LocalizedResourceLookup.text(bundle: bundle, language: "zh-Hant", key: "missing.key", fallback: "Readable fallback", table: "CombinedLocalizable") == "Readable fallback", "Missing key must use caller fallback")
 expect(LCFormatLocalizedString("%2$lld items for %1$@ (100%%)", locale: Locale(identifier: "en_US_POSIX"), arguments: ["SideStore", Int64(42)]) == "42 items for SideStore (100%)", "Positional variadic formatting failed")
 expect(LCFormatLocalizedString("%@ / %@ / %d", arguments: ["证书", "描述文件", Int32(7)]) == "证书 / 描述文件 / 7", "Mixed argument formatting failed")
-print("PASS: \(cases.count) language cases, snapshot fallback, resource ownership, English fallback and mixed/positional formatting")
+print("PASS: \(cases.count) language cases, snapshot fallback, resource ownership, English fallback and mixed/positional formatting; certificate values preserved")
