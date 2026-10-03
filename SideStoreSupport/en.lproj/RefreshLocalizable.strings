@@ -1,0 +1,13 @@
+"refresh.busy" = "Another refresh task is in progress.";
+"refresh.listener" = "Unable to create the refresh XPC listener.";
+"refresh.home" = "LiveContainer home path is unavailable.";
+"refresh.bookmark" = "Unable to create a security-scoped bookmark for SideStore.";
+"refresh.extension" = "Unable to locate LiveProcess bundle. Reinstall LiveContainer+SideStore and keep app extensions (Use Main Profile).";
+"refresh.quit" = "Built-in SideStore quit unexpectedly";
+"refresh.start" = "Built-in SideStore failed to start.";
+"refresh.interrupted" = "SideStore refresh XPC connection was interrupted.";
+"refresh.invalidated" = "SideStore refresh XPC connection was invalidated.";
+"refresh.client" = "The embedded SideStore XPC client is unavailable.";
+"refresh.start_timeout" = "Built-in SideStore failed to start in reasonable time";
+"refresh.timeout" = "SideStore refresh timed out.";
+"refresh.persistence" = "Unable to save refresh state. Unlock the device and check available storage before retrying.";

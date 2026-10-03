@@ -161,13 +161,12 @@ extension String: @retroactive LocalizedError {
         
     private static var enBundle : Bundle? = {
         let language = "en"
-        let path = Bundle.main.path(forResource:language, ofType: "lproj")
-        let bundle = Bundle(path: path!)
-        return bundle
+        guard let path = UserDefaults.lcMainBundle().path(forResource: language, ofType: "lproj") else { return nil }
+        return Bundle(path: path)
     }()
     
     var loc: String {
-        let message = NSLocalizedString(self, comment: "")
+        let message = UserDefaults.lcMainBundle().localizedString(forKey: self, value: self, table: nil)
         if message != self {
             return message
         }
@@ -180,7 +179,7 @@ extension String: @retroactive LocalizedError {
     }
     
     func localizeWithFormat(_ arguments: CVarArg...) -> String{
-        String.localizedStringWithFormat(self.loc, arguments)
+        LCFormatLocalizedString(self.loc, arguments: arguments)
     }
     
     func sanitizeNonACSII() -> String  {

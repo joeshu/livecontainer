@@ -1,3 +1,4 @@
+#include <unistd.h>
 //
 //  main.m
 //  LiveProcess
@@ -11,6 +12,7 @@
 #import "../LiveContainer/utils.h"
 #import "../LiveContainer/Tweaks/Tweaks.h"
 #import "../SideStoreSupport/XPCServer.h"
+#import "RefreshDirectoryAccess.h"
 
 @interface LiveProcessHandler : NSObject<NSExtensionRequestHandling>
 @end
@@ -105,19 +107,37 @@ int LiveProcessMain(int argc, char *argv[]) {
                   resolvedURL.path);
         }
     }
-    BOOL access = accessibleBookmarkedUrls.count > 0;
-    
     if ([appInfo[@"selected"] isEqualToString:@"builtinSideStore"]) {
-        if(access) {
-            [lcUserDefaults setObject:accessibleBookmarkedUrls.firstObject.path
-                               forKey:@"specifiedSideStoreContainerPath"];
+        // A second journal bookmark must not accidentally become SideStore's
+        // data container if the first bookmark could not be accessed. Select
+        // each granted directory by identity, not array position.
+        NSDictionary<NSString *, NSURL *> *directories = LCScopedRefreshDirectories(appInfo, accessibleBookmarkedUrls);
+        NSURL *containerURL = directories[@"container"];
+        NSURL *journalURL = directories[@"journal"];
+        unsetenv("LC_REFRESH_JOURNAL_PATH");
+        if (!containerURL || !journalURL) {
+            NSLog(@"[LiveProcess] Missing granted refresh directories; refusing to load SideStore.");
+            _exit(1);
         }
+        [lcUserDefaults setObject:containerURL.path forKey:@"specifiedSideStoreContainerPath"];
+        // HOME belongs to the extension, not the host. Expose only the exact
+        // resolved and granted host journal path to the worker factory.
+        setenv("LC_REFRESH_JOURNAL_PATH", journalURL.fileSystemRepresentation, 1);
         NSXPCListenerEndpoint* endpoint = appInfo[@"endpoint"];
 
         NSXPCConnection* connection = [[NSXPCConnection alloc] initWithListenerEndpoint:endpoint];
         connection.remoteObjectInterface = [NSXPCInterface interfaceWithProtocol:@protocol(RefreshServer)];
+        // This built-in SideStore worker belongs to one coordinator. If the
+        // coordinator disappears, retire this process rather than leaving an
+        // orphan refresh holding the worker lease indefinitely. An installation
+        // already accepted by iOS may still finish outside this process.
         connection.interruptionHandler = ^{
-            NSLog(@"interrupted!!!");
+            NSLog(@"[LiveProcess] Refresh coordinator interrupted; stopping worker.");
+            _exit(0);
+        };
+        connection.invalidationHandler = ^{
+            NSLog(@"[LiveProcess] Refresh coordinator invalidated; stopping worker.");
+            _exit(0);
         };
         
         [connection activate];

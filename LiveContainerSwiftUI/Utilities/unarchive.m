@@ -2,6 +2,7 @@
 
 #include "archive.h"
 #include "archive_entry.h"
+#include <stdlib.h>
 
 static int
 copy_data(struct archive *ar, struct archive *aw, NSProgress *progress)
@@ -33,12 +34,21 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
     struct archive_entry *entry;
     int flags;
     int r;
+    // Foundation may abbreviate /private/var back to /var. libarchive's
+    // secure-link mode needs the actual POSIX path, without parent symlinks.
+    char *resolvedRoot = realpath(extractionPath.fileSystemRepresentation, NULL);
+    if (!resolvedRoot) return 1;
+    NSString *root = [NSString stringWithUTF8String:resolvedRoot];
+    free(resolvedRoot);
+    if (!root.length) return 1;
 
     /* Select which attributes we want to restore. */
     flags = ARCHIVE_EXTRACT_TIME;
     flags |= ARCHIVE_EXTRACT_PERM;
     flags |= ARCHIVE_EXTRACT_ACL;
     flags |= ARCHIVE_EXTRACT_FFLAGS;
+    flags |= ARCHIVE_EXTRACT_SECURE_SYMLINKS;
+    flags |= ARCHIVE_EXTRACT_SECURE_NODOTDOT;
 
     // Calculate decompressed size
     a = archive_read_new();
@@ -51,7 +61,7 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
     while ((r = archive_read_next_header(a, &entry)) != ARCHIVE_EOF) {
         if (r < ARCHIVE_OK)
             fprintf(stderr, "%s\n", archive_error_string(a));
-        if (r < ARCHIVE_WARN) {
+        if (r < ARCHIVE_OK) {
             archive_read_close(a);
             archive_read_free(a);
             return 1;
@@ -78,34 +88,65 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
             break;
         if (r < ARCHIVE_OK)
             fprintf(stderr, "%s\n", archive_error_string(a));
-        if (r < ARCHIVE_WARN)
+        if (r < ARCHIVE_OK)
             break;
         
-        NSString* currentFile = [NSString stringWithUTF8String:archive_entry_pathname(entry)];
-        NSString* fullOutputPath = [extractionPath stringByAppendingPathComponent:currentFile];
-        //printf("extracting %@ to %@\n", currentFile, fullOutputPath);
+        const char *rawPath = archive_entry_pathname(entry);
+        NSString *currentFile = rawPath ? [NSString stringWithUTF8String:rawPath] : nil;
+        if (!currentFile.length || currentFile.isAbsolutePath ||
+            [currentFile.pathComponents containsObject:@".."] || archive_entry_hardlink(entry)) {
+            r = ARCHIVE_FATAL;
+            break;
+        }
+        NSString *fullOutputPath = [root stringByAppendingPathComponent:currentFile];
+        const char *rawLink = archive_entry_symlink(entry);
+        if (rawLink) {
+            NSString *target = [NSString stringWithUTF8String:rawLink];
+            // Validate relative link depth directly. Foundation's path
+            // standardization can turn /private/var back into /var, which is
+            // the same directory but fails a canonical-root prefix comparison.
+            BOOL safe = target.length && !target.isAbsolutePath;
+            NSInteger depth = 0;
+            for (NSString *component in currentFile.stringByDeletingLastPathComponent.pathComponents) {
+                if (component.length && ![component isEqualToString:@"."]) depth++;
+            }
+            for (NSString *component in target.pathComponents) {
+                if ([component isEqualToString:@".."]) {
+                    if (depth == 0) { safe = NO; break; }
+                    depth--;
+                } else if (component.length && ![component isEqualToString:@"."]) {
+                    depth++;
+                }
+            }
+            if (!safe) {
+                r = ARCHIVE_FATAL;
+                break;
+            }
+        }
         archive_entry_set_pathname(entry, fullOutputPath.fileSystemRepresentation);
-        
+
         r = archive_write_header(ext, entry);
-        if (r < ARCHIVE_OK)
+        if (r < ARCHIVE_OK) {
             fprintf(stderr, "%s\n", archive_error_string(ext));
-        else if (archive_entry_size(entry) > 0) {
+            break;
+        } else if (archive_entry_size(entry) > 0) {
             r = copy_data(a, ext, progress);
             if (r < ARCHIVE_OK)
                 fprintf(stderr, "%s\n", archive_error_string(ext));
-            if (r < ARCHIVE_WARN)
+            if (r < ARCHIVE_OK)
                 break;
         }
         r = archive_write_finish_entry(ext);
         if (r < ARCHIVE_OK)
             fprintf(stderr, "%s\n", archive_error_string(ext));
-        if (r < ARCHIVE_WARN)
+        if (r < ARCHIVE_OK)
             break;
     }
-    archive_read_close(a);
+    BOOL success = (r == ARCHIVE_EOF);
+    if (archive_read_close(a) < ARCHIVE_OK) success = NO;
     archive_read_free(a);
-    archive_write_close(ext);
+    if (archive_write_close(ext) < ARCHIVE_OK) success = NO;
     archive_write_free(ext);
-    
-    return 0;
+
+    return success ? 0 : 1;
 }

@@ -10,16 +10,17 @@
 
 __attribute__((swift_attr("@Sendable")))
 @protocol RefreshServer
-- (void)updateProgress:(double)value;
-- (void)finish:(NSString*)error;
+- (void)updateProgress:(double)value taskID:(NSString*)taskID;
+- (void)finish:(NSString* _Nullable)error taskID:(NSString*)taskID;
 - (void)onConnection:(NSXPCConnection*)connection;
 - (void)finishedLaunching;
-- (void)addNotificationRequest:(UNNotificationRequest*)request;
+- (void)addNotificationRequest:(UNNotificationRequest*)request reply:(void (^)(NSString* _Nullable error))reply;
+- (void)notificationAuthorizationStatusWithReply:(void (^)(NSInteger status))reply NS_SWIFT_NAME(notificationAuthorizationStatus(_:));
 - (void)removePendingNotificationRequestsWithIdentifiers:(NSArray<NSString*>*)identifiers;
 @end
 
 @protocol RefreshClient
-- (void)refreshAllAppsWithIdentifier:(NSString*)identifier mangledTypeName:(NSString *)mangledTypeName;
+- (void)refreshAllAppsWithIdentifier:(NSString*)identifier mangledTypeName:(NSString *)mangledTypeName taskID:(NSString*)taskID;
 @end
 
 @interface LiveProcessSideStoreHandler : NSObject

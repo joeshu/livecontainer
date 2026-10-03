@@ -116,6 +116,8 @@ Unfortunately, not all apps work in LiveContainer, so we have a [compatibility l
 ## Building
 Open Xcode, edit `DEVELOPMENT_TEAM[config=Debug]` in `xcconfigs/Global.xcconfig` to your team id and compile.
 
+For the fork's combined build configuration, lifecycle changes, and validation, see [combined reliability notes](docs/combined-reliability.md).
+
 ## Project structure
 ### Main executable
 - Core of LiveContainer

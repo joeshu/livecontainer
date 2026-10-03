@@ -1,0 +1,1535 @@
+diff --git a/AltStore/Authentication/Authentication.storyboard b/AltStore/Authentication/Authentication.storyboard
+index 530dc557..2f17a945 100644
+--- a/AltStore/Authentication/Authentication.storyboard
++++ b/AltStore/Authentication/Authentication.storyboard
+@@ -489,6 +489,7 @@
+                     <simulatedNavigationBarMetrics key="simulatedTopBarMetrics" prompted="NO"/>
+                     <connections>
+                         <outlet property="placeholderView" destination="fpO-Bf-gFY" id="q7d-au-d94"/>
++                        <outlet property="laterButton" destination="qua-VA-asJ" id="LC-later-outlet"/>
+                         <outlet property="reinstallButton" destination="xcg-hT-tDe" id="M5L-r0-Zg7"/>
+                     </connections>
+                 </viewController>
+diff --git a/AltStore/Authentication/ResignAltStoreViewController.swift b/AltStore/Authentication/ResignAltStoreViewController.swift
+index 959dfe40..90bf7d6e 100644
+--- a/AltStore/Authentication/ResignAltStoreViewController.swift
++++ b/AltStore/Authentication/ResignAltStoreViewController.swift
+@@ -18,13 +18,21 @@ final class ResignAltStoreViewController: UIViewController
+     
+     @IBOutlet private var placeholderView: RSTPlaceholderView!
+     @IBOutlet private var reinstallButton: PillButton!
++    @IBOutlet private var laterButton: UIButton!
+     
+     override func viewDidLoad()
+     {
+         super.viewDidLoad()
+         
++        let host = Bundle.Info.activeBundle
++        let isCombined = host.object(forInfoDictionaryKey: "LCSideStoreSourceURL") != nil
++        self.navigationItem.title = SideStoreLocalization.text("signing.title", default: "Update Signature")
++        self.laterButton.setTitle(SideStoreLocalization.text("signing.later", default: "Later"), for: .normal)
+         self.placeholderView.textLabel.isHidden = true
+         
++        self.placeholderView.detailTextLabel.numberOfLines = 0
++        self.placeholderView.detailTextLabel.font = .preferredFont(forTextStyle: .body)
++        self.placeholderView.detailTextLabel.adjustsFontForContentSizeCategory = true
+         self.placeholderView.detailTextLabel.textAlignment = .left
+         self.placeholderView.detailTextLabel.textColor = UIColor.white.withAlphaComponent(0.6)
+         
+@@ -34,37 +42,42 @@ final class ResignAltStoreViewController: UIViewController
+         
+         switch reason {
+             case .expired:
+-                reasonText = NSLocalizedString("The signing certificate used to install SideStore has expired.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.expired", default: "The installed signing certificate or provisioning profile has expired.")
+             case .revoked:
+-                reasonText = NSLocalizedString("The signing certificate used to install SideStore was revoked on the Apple Developer portal.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.revoked", default: "The installed signing certificate was revoked on the Apple Developer portal.")
+             case .freeAccountLimitRevoked:
+-                reasonText = NSLocalizedString("Free developer accounts are limited to 1 active signing certificate. Since the private key for the active certificate was not found on this device, SideStore will create a new certificate. This will automatically revoke the active certificate, which may disable installations on other devices or made by Xcode.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.free_account", default: "Free developer accounts support one active signing certificate. Its private key is missing on this device. Creating a new certificate revokes the previous certificate and may stop apps signed with it on other devices or in Xcode from opening.")
+             case .differentAccount:
+-                reasonText = NSLocalizedString("The logged-in Apple ID account has changed.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.account", default: "The signed-in Apple Account has changed.")
+             case .differentTeam:
+-                reasonText = NSLocalizedString("The active developer team has changed.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.team", default: "The selected developer team has changed.")
+             case .privateKeyLost:
+-                reasonText = NSLocalizedString("The private key for the active signing certificate is missing from this device's keychain.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.key", default: "The active signing certificate’s private key is missing from this device’s keychain.")
+             case .externalSigner:
+-                reasonText = NSLocalizedString("SideStore was installed by a different signing tool (like Xcode or AltStore).", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.external", default: "SideStore was installed using another signing tool, such as Xcode or AltStore.")
+             case .missingProfile:
+-                reasonText = NSLocalizedString("The provisioning profile for SideStore is missing or invalid.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.profile", default: "SideStore’s provisioning profile is missing or invalid.")
+             case .missingCertificate:
+-                reasonText = NSLocalizedString("The signing certificate could not be extracted from SideStore's binary.", comment: "")
++                reasonText = SideStoreLocalization.text("signing.reason.certificate", default: "SideStore’s installed signing certificate could not be read.")
+         }
+         
+         let isRevocationExpected = (reason == .privateKeyLost || reason == .freeAccountLimitRevoked)
+         let buttonTitle = isRevocationExpected ?
+-            NSLocalizedString("Revoke and Resign Now", comment: "") :
+-            NSLocalizedString("Resign Now", comment: "")
++            SideStoreLocalization.text("signing.revoke_now", default: "Revoke Certificate and Update Signature") :
++            SideStoreLocalization.text("signing.now", default: "Update Signature Now")
+         self.reinstallButton.setTitle(buttonTitle, for: .normal)
+         self.reinstallButton.fontSize = 15
++        self.reinstallButton.titleLabel?.numberOfLines = 0
++        self.reinstallButton.titleLabel?.textAlignment = .center
+         
+-        let header = NSLocalizedString("Signing certificate mismatch detected.", comment: "")
+-        let paragraph1 = NSLocalizedString("To ensure you can continue using SideStore, \nthe app must be reinstalled now using the new certificate. Otherwise, you will be unable to refresh or open SideStore once the old certificate expires.", comment: "")
+-        let paragraph2 = NSLocalizedString("This reinstallation registers the new signature with the OS and will terminate SideStore. You can reopen SideStore immediately once reinstallation is completed.", comment: "")
++        let header = SideStoreLocalization.text("signing.header", default: "The installed signature needs to be updated.")
++        let paragraph1 = SideStoreLocalization.text("signing.body", default: "Reinstall SideStore with the new certificate to keep opening and refreshing it after the old signature expires.")
++        let paragraph2 = SideStoreLocalization.text("signing.reopen", default: "Reinstallation closes SideStore while iOS registers the new signature. Reopen it when installation finishes.")
+         
+-        let fullText = "\(header)\n\n\(paragraph1)\n\n\(paragraph2)"
++        var fullText = "\(header)\n\n\(paragraph1)\n\n\(paragraph2)"
++        if isCombined {
++            fullText = header + "\n\n" + SideStoreLocalization.text("signing.combined_body", default: "Reinstall LiveContainer+SideStore with the new signature. Installation closes the current app. Keep the LiveProcess and Widget extensions, then reopen LiveContainer when installation finishes. Reinstall over the existing app; do not delete it first.")
++        }
+         let attributedString = NSMutableAttributedString(string: fullText)
+         
+         if let headerRange = fullText.range(of: header) {
+@@ -73,6 +86,28 @@ final class ResignAltStoreViewController: UIViewController
+         }
+         
+         self.placeholderView.detailTextLabel.attributedText = attributedString
++
++        if isCombined {
++            let profile = ALTApplication(fileURL: host.bundleURL)?.provisioningProfile
++            let certificate = CertificateManager.shared.getSigningCertificate(at: host.bundleURL)
++            let formatter = DateFormatter()
++            formatter.locale = SideStoreLocalization.locale
++            formatter.dateStyle = .medium
++            formatter.timeStyle = .short
++            let unavailable = SideStoreLocalization.text("signing.unavailable", default: "Unavailable")
++            let certificateExpiry = certificate.map { formatter.string(from: $0.expiryDate) } ?? unavailable
++            let profileExpiry = profile.map { formatter.string(from: $0.expirationDate) } ?? unavailable
++            let details = UILabel()
++            details.numberOfLines = 0
++            details.font = .preferredFont(forTextStyle: .caption1)
++            details.adjustsFontForContentSizeCategory = true
++            details.textColor = UIColor.white.withAlphaComponent(0.7)
++            details.text = SideStoreLocalization.format("signing.details", default: "Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@",
++                                  host.object(forInfoDictionaryKey: "CFBundleDisplayName") as? String ?? "LiveContainer+SideStore",
++                                  certificateExpiry, profileExpiry,
++                                  host.object(forInfoDictionaryKey: "LCSideStoreReleaseChannel") as? String ?? unavailable)
++            self.placeholderView.stackView.addArrangedSubview(details)
++        }
+         
+         // Separator Line
+         let separator = UIView()
+@@ -82,16 +117,19 @@ final class ResignAltStoreViewController: UIViewController
+         
+         // Reason Bold Prefix
+         let reasonLabel = UILabel()
+-        reasonLabel.text = NSLocalizedString("Reason:", comment: "")
++        reasonLabel.text = SideStoreLocalization.text("signing.reason_label", default: "Reason:")
+         reasonLabel.textColor = .white
+-        reasonLabel.font = UIFont.boldSystemFont(ofSize: 14)
++        reasonLabel.font = .preferredFont(forTextStyle: .headline)
++        reasonLabel.adjustsFontForContentSizeCategory = true
+         reasonLabel.setContentHuggingPriority(.required, for: .horizontal)
+         
+         // Reason Description
+         let reasonTextLabel = UILabel()
+         reasonTextLabel.text = reasonText
+         reasonTextLabel.textColor = UIColor.white.withAlphaComponent(0.6)
+-        reasonTextLabel.font = UIFont.systemFont(ofSize: 14)
++        reasonTextLabel.font = .preferredFont(forTextStyle: .subheadline)
++        reasonTextLabel.adjustsFontForContentSizeCategory = true
++        reasonTextLabel.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+         reasonTextLabel.numberOfLines = 0
+         
+         // Horizontal Container for key-value layout
+@@ -113,6 +151,34 @@ final class ResignAltStoreViewController: UIViewController
+         
+         self.placeholderView.stackView.setCustomSpacing(20, after: self.placeholderView.detailTextLabel)
+         self.placeholderView.stackView.setCustomSpacing(15, after: separator)
++
++        #if !os(tvOS)
++        // The old placeholder centered long text behind the fixed action bar.
++        // Constrain a scrolling content area above the actions for small screens
++        // and accessibility text sizes, keeping both actions reachable.
++        let content = self.placeholderView.stackView!
++        let actionBar = self.reinstallButton.superview!
++        content.removeFromSuperview()
++        content.alignment = .fill
++        content.distribution = .fill
++        self.placeholderView.isHidden = true
++        let scrollView = UIScrollView()
++        scrollView.translatesAutoresizingMaskIntoConstraints = false
++        scrollView.contentInsetAdjustmentBehavior = .never
++        self.view.insertSubview(scrollView, belowSubview: actionBar)
++        scrollView.addSubview(content)
++        NSLayoutConstraint.activate([
++            scrollView.topAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.topAnchor),
++            scrollView.leadingAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.leadingAnchor),
++            scrollView.trailingAnchor.constraint(equalTo: self.view.safeAreaLayoutGuide.trailingAnchor),
++            scrollView.bottomAnchor.constraint(equalTo: actionBar.topAnchor, constant: -12),
++            content.topAnchor.constraint(equalTo: scrollView.contentLayoutGuide.topAnchor, constant: 16),
++            content.bottomAnchor.constraint(equalTo: scrollView.contentLayoutGuide.bottomAnchor, constant: -16),
++            content.leadingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.leadingAnchor, constant: 24),
++            content.trailingAnchor.constraint(equalTo: scrollView.contentLayoutGuide.trailingAnchor, constant: -24),
++            content.widthAnchor.constraint(equalTo: scrollView.frameLayoutGuide.widthAnchor, constant: -48)
++        ])
++        #endif
+     }
+ }
+ 
+@@ -150,11 +216,11 @@ private extension ResignAltStoreViewController
+                             return
+                         }
+                         
+-                        let alertController = UIAlertController(title: NSLocalizedString("Failed to Resign SideStore", comment: ""), message: error.localizedFailureReason ?? error.localizedDescription, preferredStyle: .alert)
+-                        alertController.addAction(UIAlertAction(title: NSLocalizedString("Try Again", comment: ""), style: .default, handler: { (action) in
++                        let alertController = UIAlertController(title: SideStoreLocalization.text("signing.failed", default: "Could Not Update Signature"), message: error.localizedFailureReason ?? error.localizedDescription, preferredStyle: .alert)
++                        alertController.addAction(UIAlertAction(title: SideStoreLocalization.text("signing.retry", default: "Try Again"), style: .default, handler: { (action) in
+                             refresh()
+                         }))
+-                        alertController.addAction(UIAlertAction(title: NSLocalizedString("Resign Later", comment: ""), style: .cancel, handler: { (action) in
++                        alertController.addAction(UIAlertAction(title: SideStoreLocalization.text("signing.later", default: "Later"), style: .cancel, handler: { (action) in
+                             self.completionHandler?(.failure(error))
+                         }))
+                         
+diff --git a/AltStore/Authentication/tvOS/Authentication.storyboard b/AltStore/Authentication/tvOS/Authentication.storyboard
+index 3b115c10..30b2072f 100644
+--- a/AltStore/Authentication/tvOS/Authentication.storyboard
++++ b/AltStore/Authentication/tvOS/Authentication.storyboard
+@@ -486,6 +486,7 @@
+                     <simulatedNavigationBarMetrics key="simulatedTopBarMetrics" prompted="NO"/>
+                     <connections>
+                         <outlet property="placeholderView" destination="fpO-Bf-gFY" id="q7d-au-d94"/>
++                        <outlet property="laterButton" destination="qua-VA-asJ" id="LC-later-outlet"/>
+                         <outlet property="reinstallButton" destination="xcg-hT-tDe" id="M5L-r0-Zg7"/>
+                     </connections>
+                 </viewController>
+diff --git a/AltStore/Core/Roxas/NSString+Localization.swift b/AltStore/Core/Roxas/NSString+Localization.swift
+index c841341f..bc17e666 100644
+--- a/AltStore/Core/Roxas/NSString+Localization.swift
++++ b/AltStore/Core/Roxas/NSString+Localization.swift
+@@ -8,8 +8,8 @@
+ @preconcurrency import UIKit
+ 
+ public extension String {
+-    init(formatted: String, comment: String? = nil, _ args: String...) {
+-        self.init(format: NSLocalizedString(formatted, comment: comment ?? ""), args)
++    init(formatted: String, comment: String? = nil, _ args: CVarArg...) {
++        self.init(format: SideStoreLocalization.legacyText(formatted), locale: SideStoreLocalization.locale, arguments: args)
+     }
+ }
+ 
+diff --git a/AltStore/Core/Utilities/InterfaceLocalization.swift b/AltStore/Core/Utilities/InterfaceLocalization.swift
+index cafb4b94..84306f5e 100644
+--- a/AltStore/Core/Utilities/InterfaceLocalization.swift
++++ b/AltStore/Core/Utilities/InterfaceLocalization.swift
+@@ -8,32 +8,8 @@
+ 
+ @preconcurrency import UIKit
+ 
+-/// Bundle marker whose image lives with SideStore itself. In standalone mode
+-/// this resolves to SideStore.app; when LiveContainer dylibifies SideStore into
+-/// SideStoreApp.framework it resolves to that embedded framework instead of the
+-/// LiveContainer host bundle.
+-private final class SideStoreLocalizationBundleMarker: NSObject {}
+-
+ private enum InterfaceLocalization
+ {
+-    private static let resourceBundle = Bundle(for: SideStoreLocalizationBundleMarker.self)
+-    private static let languagePreferenceKey = "SideStorePreferredLanguage"
+-
+-    private static var activeBundle: Bundle
+-    {
+-        guard let languageCode = UserDefaults.standard.string(forKey: languagePreferenceKey),
+-              languageCode != "en",
+-              let path = resourceBundle.path(forResource: languageCode, ofType: "lproj"),
+-              let bundle = Bundle(path: path) else
+-        {
+-            // English is the source language. Returning the framework bundle
+-            // keeps base English strings intact when no explicit Chinese
+-            // preference is selected.
+-            return resourceBundle
+-        }
+-        return bundle
+-    }
+-
+     // Keep this intentionally scoped to static interface copy. This prevents
+     // user/app-provided content from being translated merely because it happens
+     // to match a localization key.
+@@ -83,15 +59,6 @@ private enum InterfaceLocalization
+     {
+         guard let string, !string.isEmpty else { return string }
+ 
+-        // Prefer SideStore's normal localization table first. Do not use
+-        // Bundle.main here: in LiveContainer integration Bundle.main belongs to
+-        // the host app while SideStore's lproj files remain in its framework.
+-        let standard = activeBundle.localizedString(forKey: string, value: string, table: nil)
+-        if standard != string
+-        {
+-            return standard
+-        }
+-
+         // My Apps renders the remaining App ID count dynamically. Handle both
+         // singular and plural English output without changing model/user data.
+         for suffix in [" App ID Remaining", " App IDs Remaining"]
+@@ -102,7 +69,7 @@ private enum InterfaceLocalization
+                 if let count = Int(countText)
+                 {
+                     let key = "%d App IDs Remaining"
+-                    let format = activeBundle.localizedString(forKey: key, value: key, table: "InterfaceFallback")
++                    let format = SideStoreLocalization.legacyText(key, table: "InterfaceFallback")
+                     if format != key
+                     {
+                         return String(format: format, count)
+@@ -112,7 +79,16 @@ private enum InterfaceLocalization
+         }
+ 
+         guard storyboardKeys.contains(string) else { return string }
+-        return activeBundle.localizedString(forKey: string, value: string, table: "InterfaceFallback")
++        // Prefer SideStore's normal localization table first. Do not use
++        // Bundle.main here: in LiveContainer integration Bundle.main belongs to
++        // the host app while SideStore's lproj files remain in its framework.
++        let standard = SideStoreLocalization.legacyText(string)
++        if standard != string
++        {
++            return standard
++        }
++
++        return SideStoreLocalization.legacyText(string, table: "InterfaceFallback")
+     }
+ 
+     static func localize(_ item: UIBarButtonItem?)
+diff --git a/AltStore/Core/Utilities/SideStoreLocalization.swift b/AltStore/Core/Utilities/SideStoreLocalization.swift
+new file mode 100644
+index 00000000..81546d19
+--- /dev/null
++++ b/AltStore/Core/Utilities/SideStoreLocalization.swift
+@@ -0,0 +1,32 @@
++import Foundation
++
++// Resolve resources from the SideStore image, never from the LiveContainer host.
++private final class SideStoreLocalizationBundleMarker: NSObject {}
++
++enum SideStoreLocalization {
++    static let resourceBundle = Bundle(for: SideStoreLocalizationBundleMarker.self)
++
++    static var language: String {
++        SideStoreLanguagePolicy.resolve(
++            preference: UserDefaults.standard.string(forKey: SideStoreLanguagePolicy.preferenceKey),
++            inheritedLanguages: SideStoreLanguagePolicy.inheritedLanguages()
++        )
++    }
++
++    static var locale: Locale { Locale(identifier: language + (Locale.current.regionCode.map { "_" + $0 } ?? "")) }
++
++    static func text(_ key: String, default fallback: String, table: String = "CombinedLocalizable") -> String {
++        // Use a sentinel so a translated value identical to its key is not
++        // mistaken for a missing translation. Fall back to English explicitly.
++        LocalizedResourceLookup.text(bundle: resourceBundle, language: language,
++                                     key: key, fallback: fallback, table: table)
++    }
++
++    static func legacyText(_ key: String, table: String = "Localizable") -> String {
++        text(key, default: key, table: table)
++    }
++
++    static func format(_ key: String, default fallback: String, _ arguments: CVarArg...) -> String {
++        String(format: text(key, default: fallback), locale: locale, arguments: arguments)
++    }
++}
+diff --git a/AltStore/Info.plist b/AltStore/Info.plist
+index e6b776a8..0eb4520e 100644
+--- a/AltStore/Info.plist
++++ b/AltStore/Info.plist
+@@ -20,6 +20,7 @@
+ 	<array>
+ 		<string>en</string>
+ 		<string>zh-Hans</string>
++		<string>zh-Hant</string>
+ 	</array>
+ 	<key>CFBundleDocumentTypes</key>
+ 	<array>
+diff --git a/AltStore/Settings/SettingsViewController.swift b/AltStore/Settings/SettingsViewController.swift
+index 743d31cd..dae5bb62 100644
+--- a/AltStore/Settings/SettingsViewController.swift
++++ b/AltStore/Settings/SettingsViewController.swift
+@@ -100,24 +100,17 @@ extension SettingsViewController
+ 
+ private enum SideStoreLanguage: String, CaseIterable
+ {
+-    case english = "en"
++    case system = "system"
+     case simplifiedChinese = "zh-Hans"
++    case traditionalChinese = "zh-Hant"
++    case english = "en"
+ 
+-    var localeIdentifier: String
+-    {
+-        switch self
+-        {
+-        case .english: return "en_US"
+-        case .simplifiedChinese: return "zh_CN"
+-        }
+-    }
+-
+-    var displayNameKey: String
+-    {
+-        switch self
+-        {
++    var displayName: String {
++        switch self {
++        case .system: return SideStoreLocalization.text("language.follow_system", default: "Follow System")
++        case .simplifiedChinese: return "简体中文"
++        case .traditionalChinese: return "繁體中文"
+         case .english: return "English"
+-        case .simplifiedChinese: return "Simplified Chinese"
+         }
+     }
+ }
+@@ -492,7 +485,7 @@ private extension SettingsViewController
+             }
+             else
+             {
+-                settingsHeaderFooterView.secondaryLabel.text = NSLocalizedString("Tap Change Language to choose Chinese or English. SideStore will restart to apply the new language.", comment: "")
++                settingsHeaderFooterView.secondaryLabel.text = SideStoreLocalization.text("language.help", default: "Choose Follow System, Simplified Chinese, Traditional Chinese, or English. Restart SideStore to apply.")
+                 settingsHeaderFooterView.button.setTitle(NSLocalizedString("Change Language", comment: ""), for: .normal)
+                 settingsHeaderFooterView.button.removeTarget(nil, action: nil, for: .primaryActionTriggered)
+                 settingsHeaderFooterView.button.addTarget(self, action: #selector(SettingsViewController.openLanguageSettings(_:)), for: .primaryActionTriggered)
+@@ -877,14 +870,14 @@ private extension SettingsViewController
+         #if !os(tvOS)
+         let current = currentSideStoreLanguage()
+         let alertController = UIAlertController(
+-            title: NSLocalizedString("Choose SideStore language", comment: ""),
+-            message: NSLocalizedString("This changes SideStore directly. The app will restart after you choose a language.", comment: ""),
++            title: SideStoreLocalization.text("language.choose", default: "SideStore Language"),
++            message: SideStoreLocalization.text("language.scope", default: "Follow System uses the containing app’s language. A separate choice changes SideStore only and takes effect after restarting."),
+             preferredStyle: .actionSheet
+         )
+ 
+         for language in SideStoreLanguage.allCases
+         {
+-            let title = NSLocalizedString(language.displayNameKey, comment: "")
++            let title = (language == current ? "✓ " : "") + language.displayName
+             let action = UIAlertAction(title: title, style: .default) { [weak self] _ in
+                 guard let self, language != current else { return }
+                 self.applySideStoreLanguage(language)
+@@ -907,32 +900,38 @@ private extension SettingsViewController
+     #if !os(tvOS)
+     private func currentSideStoreLanguage() -> SideStoreLanguage
+     {
+-        if let stored = UserDefaults.standard.string(forKey: "SideStorePreferredLanguage"),
++        if let stored = UserDefaults.standard.string(forKey: SideStoreLanguagePolicy.preferenceKey),
+            let language = SideStoreLanguage(rawValue: stored)
+         {
+             return language
+         }
+ 
+-        let systemLanguage = Locale.preferredLanguages.first ?? "en"
+-        return systemLanguage.hasPrefix("zh") ? .simplifiedChinese : .english
++        return .system
+     }
+ 
+     private func applySideStoreLanguage(_ language: SideStoreLanguage)
+     {
+-        UserDefaults.standard.set(language.rawValue, forKey: "SideStorePreferredLanguage")
+-        // AppleLanguages is read at process launch by NSLocalizedString.
+-        // Persisting it in the app domain makes the choice work in both the
+-        // standalone SideStore app and the embedded LiveContainer bundle.
+-        UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
+-        UserDefaults.standard.set(language.localeIdentifier, forKey: "AppleLocale")
+-        UserDefaults.standard.synchronize()
++        UserDefaults.standard.set(language.rawValue, forKey: SideStoreLanguagePolicy.preferenceKey)
++        if language == .system {
++            UserDefaults.standard.removeObject(forKey: "AppleLanguages")
++        } else {
++            // Mirror the choice only in SideStore's guest domain for legacy
++            // storyboard/SwiftUI text. Do not change the host's preference.
++            UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")
++        }
++        // Remove the locale forced by the old language picker; regional formats
++        // should remain the user's choice rather than being fixed to en_US/zh_CN.
++        if let oldLocale = UserDefaults.standard.string(forKey: "AppleLocale"),
++           ["en_US", "zh_CN"].contains(oldLocale) {
++            UserDefaults.standard.removeObject(forKey: "AppleLocale")
++        }
+ 
+         let alertController = UIAlertController(
+-            title: NSLocalizedString("Language changed", comment: ""),
+-            message: NSLocalizedString("SideStore will restart now to apply the new language.", comment: ""),
++            title: SideStoreLocalization.text("language.changed", default: "Language Changed"),
++            message: SideStoreLocalization.text("language.restart_message", default: "Restart to apply this language throughout SideStore. LiveContainer and other apps keep their own settings."),
+             preferredStyle: .alert
+         )
+-        alertController.addAction(UIAlertAction(title: NSLocalizedString("Restart SideStore", comment: ""), style: .default) { _ in
++        alertController.addAction(UIAlertAction(title: SideStoreLocalization.text("language.restart", default: "Restart SideStore"), style: .default) { _ in
+             exit(0)
+         })
+         present(alertController, animated: true)
+diff --git a/AltStore/en.lproj/CombinedLocalizable.strings b/AltStore/en.lproj/CombinedLocalizable.strings
+new file mode 100644
+index 00000000..31f82220
+--- /dev/null
++++ b/AltStore/en.lproj/CombinedLocalizable.strings
+@@ -0,0 +1,60 @@
++/* Stable keys for language preferences and signature recovery. */
++"language.follow_system" = "Follow System";
++"language.choose" = "SideStore Language";
++"language.scope" = "Follow System uses the containing app’s language. A separate choice changes SideStore only and takes effect after restarting.";
++"language.changed" = "Language Changed";
++"language.restart_message" = "Restart to apply this language throughout SideStore. LiveContainer and other apps keep their own settings.";
++"language.restart" = "Restart SideStore";
++"language.help" = "Choose Follow System, Simplified Chinese, Traditional Chinese, or English. Restart SideStore to apply.";
++"signing.title" = "Update Signature";
++"signing.header" = "The installed signature needs to be updated.";
++"signing.body" = "Reinstall SideStore with the new certificate to keep opening and refreshing it after the old signature expires.";
++"signing.reopen" = "Reinstallation closes SideStore while iOS registers the new signature. Reopen it when installation finishes.";
++"signing.combined_body" = "Reinstall LiveContainer+SideStore with the new signature. Installation closes the current app. Keep the LiveProcess and Widget extensions, then reopen LiveContainer when installation finishes. Reinstall over the existing app; do not delete it first.";
++"signing.now" = "Update Signature Now";
++"signing.revoke_now" = "Revoke Certificate and Update Signature";
++"signing.later" = "Later";
++"signing.failed" = "Could Not Update Signature";
++"signing.retry" = "Try Again";
++"signing.reason_label" = "Reason:";
++"signing.unavailable" = "Unavailable";
++"signing.details" = "Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@";
++"signing.reason.expired" = "The installed signing certificate or provisioning profile has expired.";
++"signing.reason.revoked" = "The installed signing certificate was revoked on the Apple Developer portal.";
++"signing.reason.free_account" = "Free developer accounts support one active signing certificate. Its private key is missing on this device. Creating a new certificate revokes the previous certificate and may stop apps signed with it on other devices or in Xcode from opening.";
++"signing.reason.account" = "The signed-in Apple Account has changed.";
++"signing.reason.team" = "The selected developer team has changed.";
++"signing.reason.key" = "The active signing certificate’s private key is missing from this device’s keychain.";
++"signing.reason.external" = "SideStore was installed using another signing tool, such as Xcode or AltStore.";
++"signing.reason.profile" = "SideStore’s provisioning profile is missing or invalid.";
++"signing.reason.certificate" = "SideStore’s installed signing certificate could not be read.";
++"package.invalid_combined" = "The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions.";
++
++/* Static certificate and account interface copy; model values remain unchanged. */
++"cert.active_section" = "Active Local Certificate";
++"cert.active" = "Active Signing Certificate";
++"cert.serial_prefix" = "SN: ";
++"cert.third_party" = "Custom third-party certificate (different team)";
++"cert.reveal" = "Reveal Details";
++"cert.hide" = "Hide Details";
++"cert.copy_serial" = "Copy S/N";
++"cert.deactivate" = "Deactivate Locally";
++"cert.empty_import" = "No active local certificate found.Import a .p12 file to sign your apps.";
++"cert.empty_create" = "No active local certificate found.Create a new certificate or import a .p12 file to sign your apps.";
++"key.paste" = "Paste your PEM-formatted private key below, or import it from a text file.";
++"key.import_pem" = "Import PEM Private Key File";
++"key.import_file" = "Import from File";
++"key.add_pem" = "Add PEM Key";
++"key.add" = "Add Private Key";
++"common.done" = "Done";
++"common.ok" = "OK";
++"key.added" = "Key Added";
++"account.keep_certificate" = "Keep signing certificate";
++"account.keep_anisette" = "Keep Anisette data";
++"cert.keep_local" = "Keep Local Certificate";
++"common.unknown" = "Unknown";
++"cert.serial" = "Serial: %@";
++"cert.expires" = "Expires: %@";
++"key.read_failed" = "Failed to read file: %@";
++"key.select_failed" = "Failed to select file: %@";
++"key.added_detail" = "Key was added to certificate %@ (SN: %@).";
+diff --git a/AltStore/zh-Hans.lproj/CombinedLocalizable.strings b/AltStore/zh-Hans.lproj/CombinedLocalizable.strings
+new file mode 100644
+index 00000000..eec62353
+--- /dev/null
++++ b/AltStore/zh-Hans.lproj/CombinedLocalizable.strings
+@@ -0,0 +1,60 @@
++/* Stable keys for language preferences and signature recovery. */
++"language.follow_system" = "跟随系统";
++"language.choose" = "SideStore 语言";
++"language.scope" = "跟随系统使用所在应用的语言。单独选择语言仅影响 SideStore，重启后生效。";
++"language.changed" = "语言已更改";
++"language.restart_message" = "请重启 SideStore，使语言设置在整个应用中生效。LiveContainer 和其他应用保留各自的设置。";
++"language.restart" = "重启 SideStore";
++"language.help" = "可选择跟随系统、简体中文、繁体中文或 English。重启 SideStore 后生效。";
++"signing.title" = "更新签名";
++"signing.header" = "需要更新当前安装的签名。";
++"signing.body" = "请使用新证书重新安装 SideStore，以便在旧签名过期后仍能打开应用和刷新签名。";
++"signing.reopen" = "重新安装时，iOS 会登记新签名并关闭 SideStore。安装完成后即可重新打开。";
++"signing.combined_body" = "请使用新签名重新安装 LiveContainer+SideStore。安装时会关闭当前应用。请保留 LiveProcess 和小组件扩展，安装完成后重新打开 LiveContainer。请覆盖安装，不要先删除应用。";
++"signing.now" = "立即更新签名";
++"signing.revoke_now" = "撤销证书并更新签名";
++"signing.later" = "稍后处理";
++"signing.failed" = "无法更新签名";
++"signing.retry" = "重试";
++"signing.reason_label" = "原因：";
++"signing.unavailable" = "暂不可用";
++"signing.details" = "签名目标：%@\n证书到期时间：%@\n描述文件到期时间：%@\n更新渠道：%@";
++"signing.reason.expired" = "当前安装使用的签名证书或描述文件已过期。";
++"signing.reason.revoked" = "当前安装使用的签名证书已在 Apple 开发者网站被撤销。";
++"signing.reason.free_account" = "免费开发者账户只能有一张有效的签名证书。本设备缺少该证书的私钥。创建新证书会撤销旧证书，可能导致其他设备或通过 Xcode 使用旧证书签名的应用无法打开。";
++"signing.reason.account" = "登录的 Apple 账户已更改。";
++"signing.reason.team" = "所选开发者团队已更改。";
++"signing.reason.key" = "本设备钥匙串中缺少有效签名证书的私钥。";
++"signing.reason.external" = "SideStore 由其他签名工具（例如 Xcode 或 AltStore）安装。";
++"signing.reason.profile" = "SideStore 的描述文件缺失或无效。";
++"signing.reason.certificate" = "无法读取 SideStore 当前安装使用的签名证书。";
++"package.invalid_combined" = "安装包必须来自当前更新源，且为包含 LiveProcess 和小组件扩展的 LiveContainer+SideStore。";
++
++/* Static certificate and account interface copy; model values remain unchanged. */
++"cert.active_section" = "当前本地证书";
++"cert.active" = "当前签名证书";
++"cert.serial_prefix" = "序列号：";
++"cert.third_party" = "第三方证书（来自其他开发者团队）";
++"cert.reveal" = "显示详情";
++"cert.hide" = "隐藏详情";
++"cert.copy_serial" = "复制序列号";
++"cert.deactivate" = "停用本地证书";
++"cert.empty_import" = "没有可用的本地证书。请导入 .p12 文件以签名应用。";
++"cert.empty_create" = "没有可用的本地证书。请创建新证书或导入 .p12 文件以签名应用。";
++"key.paste" = "在下方粘贴 PEM 格式的私钥，或从文本文件导入。";
++"key.import_pem" = "导入 PEM 私钥文件";
++"key.import_file" = "从文件导入";
++"key.add_pem" = "添加 PEM 私钥";
++"key.add" = "添加私钥";
++"common.done" = "完成";
++"common.ok" = "好";
++"key.added" = "私钥已添加";
++"account.keep_certificate" = "保留签名证书";
++"account.keep_anisette" = "保留 Anisette 数据";
++"cert.keep_local" = "保留本地证书";
++"common.unknown" = "未知";
++"cert.serial" = "序列号：%@";
++"cert.expires" = "到期日期：%@";
++"key.read_failed" = "无法读取文件：%@";
++"key.select_failed" = "无法选择文件：%@";
++"key.added_detail" = "私钥已添加到证书 %@（序列号：%@）。";
+diff --git a/AltStore/zh-Hans.lproj/Localizable.strings b/AltStore/zh-Hans.lproj/Localizable.strings
+index a39a4bd1..a5317f54 100644
+--- a/AltStore/zh-Hans.lproj/Localizable.strings
++++ b/AltStore/zh-Hans.lproj/Localizable.strings
+@@ -218,7 +218,6 @@
+ "Invalid Pairing File" = "无效的配对文件";
+ "Pairing file is invalid or missing." = "配对文件无效或缺失。";
+ "The current pairing file is invalid or missing." = "当前配对文件无效或缺失。";
+-"Network Discovery" = "网络发现";
+ "WireGuard" = "WireGuard";
+ "VPN" = "VPN";
+ "Connection" = "连接";
+@@ -240,7 +239,6 @@
+ /* Backup */
+ "Backup" = "备份";
+ "Restore" = "恢复";
+-"Backup & Restore" = "备份与恢复";
+ "Import Account" = "导入账户";
+ "Failed to export account!" = "导出账户失败！";
+ "Failed to export account data!" = "导出账户数据失败！";
+@@ -302,3 +300,12 @@
+ "Restart SideStore" = "重新启动 SideStore";
+ 
+ "English" = "英文";
++
++// LiveContainer combined installation
++"Resign LiveContainer+SideStore" = "重新签名 LiveContainer+SideStore";
++"The signing certificate or provisioning profile used to install this app has expired." = "安装此应用时使用的签名证书或描述文件已过期。";
++"LiveContainer+SideStore must be reinstalled with the new signature. This will close the current app. Keep LiveProcess and Widget extensions, then reopen LiveContainer after installation. Do not delete the app to resign it." = "需要使用新签名重新安装 LiveContainer+SideStore，操作将退出当前应用。请保留 LiveProcess 和小组件扩展，安装完成后重新打开 LiveContainer。请勿通过删除应用来重签。";
++"Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@" = "签名对象：%@\n证书到期：%@\n描述文件到期：%@\n更新渠道：%@";
++"The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions." = "重装包必须为来自当前更新源的 LiveContainer+SideStore 组合版，并保留 LiveProcess 和小组件扩展。";
++
++"Version %@%@" = "版本 %@%@";
+diff --git a/AltStore/zh-Hant.lproj/Authentication.strings b/AltStore/zh-Hant.lproj/Authentication.strings
+new file mode 100644
+index 00000000..b803abd5
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/Authentication.strings
+@@ -0,0 +1,6 @@
++/* AltStore/Authentication/Authentication.storyboard */
++"EI2-V3-zQZ.text" = "歡迎使用 SideStore。";
++"SNU-tv-8Au.text" = "使用 Apple ID 登入以開始使用。";
++"59N-O1-6bM.text" = "APPLE ID";
++"Ava-XY-7vs.text" = "密碼";
++"2N5-zd-fUj.normalTitle" = "登入";
+diff --git a/AltStore/zh-Hant.lproj/CombinedLocalizable.strings b/AltStore/zh-Hant.lproj/CombinedLocalizable.strings
+new file mode 100644
+index 00000000..65173ebf
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/CombinedLocalizable.strings
+@@ -0,0 +1,60 @@
++/* Stable keys for language preferences and signature recovery. */
++"language.follow_system" = "跟隨系統";
++"language.choose" = "SideStore 語言";
++"language.scope" = "跟隨系統使用所在應用的語言。單獨選擇語言僅影響 SideStore，重新啟動後生效。";
++"language.changed" = "語言已更改";
++"language.restart_message" = "請重新啟動 SideStore，使語言設定在整個應用中生效。LiveContainer 和其他應用保留各自的設定。";
++"language.restart" = "重新啟動 SideStore";
++"language.help" = "可選擇跟隨系統、簡體中文、繁體中文或 English。重新啟動 SideStore 後生效。";
++"signing.title" = "更新簽名";
++"signing.header" = "需要更新目前安裝的簽名。";
++"signing.body" = "請使用新憑證重新安裝 SideStore，以便在舊簽名過期後仍能開啟應用和更新簽名。";
++"signing.reopen" = "重新安裝時，iOS 會登記新簽名並關閉 SideStore。安裝完成後即可重新開啟。";
++"signing.combined_body" = "請使用新簽名重新安裝 LiveContainer+SideStore。安裝時會關閉目前應用。請保留 LiveProcess 和小工具擴充功能，安裝完成後重新開啟 LiveContainer。請覆蓋安裝，不要先刪除應用。";
++"signing.now" = "立即更新簽名";
++"signing.revoke_now" = "撤銷憑證並更新簽名";
++"signing.later" = "稍後處理";
++"signing.failed" = "無法更新簽名";
++"signing.retry" = "重試";
++"signing.reason_label" = "原因：";
++"signing.unavailable" = "暫不可用";
++"signing.details" = "簽名目標：%@\n憑證到期時間：%@\n佈署描述檔到期時間：%@\n更新管道：%@";
++"signing.reason.expired" = "目前安裝使用的簽名憑證或佈署描述檔已過期。";
++"signing.reason.revoked" = "目前安裝使用的簽名憑證已在 Apple 開發者網站被撤銷。";
++"signing.reason.free_account" = "免費開發者帳號只能有一張有效的簽名憑證。本裝置缺少該憑證的私鑰。建立新憑證會撤銷舊憑證，可能導致其他裝置或透過 Xcode 使用舊憑證簽名的應用無法開啟。";
++"signing.reason.account" = "登入的 Apple 帳號已更改。";
++"signing.reason.team" = "所選開發者團隊已更改。";
++"signing.reason.key" = "本裝置鑰匙圈中缺少有效簽名憑證的私鑰。";
++"signing.reason.external" = "SideStore 由其他簽名工具（例如 Xcode 或 AltStore）安裝。";
++"signing.reason.profile" = "SideStore 的佈署描述檔缺失或無效。";
++"signing.reason.certificate" = "無法讀取 SideStore 目前安裝使用的簽名憑證。";
++"package.invalid_combined" = "安裝套件必須來自目前更新來源，且為包含 LiveProcess 和小工具擴充功能的 LiveContainer+SideStore。";
++
++/* Static certificate and account interface copy; model values remain unchanged. */
++"cert.active_section" = "目前本機憑證";
++"cert.active" = "目前簽名憑證";
++"cert.serial_prefix" = "序號：";
++"cert.third_party" = "第三方憑證（來自其他開發者團隊）";
++"cert.reveal" = "顯示詳細資訊";
++"cert.hide" = "隱藏詳細資訊";
++"cert.copy_serial" = "複製序號";
++"cert.deactivate" = "停用本機憑證";
++"cert.empty_import" = "沒有可用的本機憑證。請匯入 .p12 檔案以簽名應用。";
++"cert.empty_create" = "沒有可用的本機憑證。請建立新憑證或匯入 .p12 檔案以簽名應用。";
++"key.paste" = "在下方貼上 PEM 格式的私鑰，或從文字檔案匯入。";
++"key.import_pem" = "匯入 PEM 私鑰檔案";
++"key.import_file" = "從檔案匯入";
++"key.add_pem" = "加入 PEM 私鑰";
++"key.add" = "加入私鑰";
++"common.done" = "完成";
++"common.ok" = "好";
++"key.added" = "私鑰已加入";
++"account.keep_certificate" = "保留簽名憑證";
++"account.keep_anisette" = "保留 Anisette 資料";
++"cert.keep_local" = "保留本機憑證";
++"common.unknown" = "未知";
++"cert.serial" = "序號：%@";
++"cert.expires" = "到期日期：%@";
++"key.read_failed" = "無法讀取檔案：%@";
++"key.select_failed" = "無法選擇檔案：%@";
++"key.added_detail" = "私鑰已加入憑證 %@（序號：%@）。";
+diff --git a/AltStore/zh-Hant.lproj/InfoPlist.strings b/AltStore/zh-Hant.lproj/InfoPlist.strings
+new file mode 100644
+index 00000000..dfcf8b4e
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/InfoPlist.strings
+@@ -0,0 +1,2 @@
++"CFBundleDisplayName" = "SideStore";
++"NSLocalNetworkUsageDescription" = "SideStore 可使用本地網路存取來發現網路中的 Bonjour（mDNS）服務。核心功能不依賴此權限。";
+diff --git a/AltStore/zh-Hant.lproj/InterfaceFallback.strings b/AltStore/zh-Hant.lproj/InterfaceFallback.strings
+new file mode 100644
+index 00000000..035c99e0
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/InterfaceFallback.strings
+@@ -0,0 +1,57 @@
++/*
++ SideStore Simplified Chinese interface fallback.
++
++ This table is intentionally limited to static UI copy that is still emitted
++ in English by legacy storyboard/resource paths. It is consumed only by
++ InterfaceLocalization.swift and does not replace the normal Localizable table.
++*/
++
++"Settings" = "設定";
++"My Apps" = "我的 App";
++"News" = "資訊";
++"Sources" = "來源";
++
++"Name" = "姓名";
++"Email" = "郵箱";
++"Type" = "型別";
++
++"Support the team" = "支援團隊";
++"Support the SideStore Team" = "支援 SideStore 團隊";
++"Support the SideStore Team by following our socials or becoming a patron!" = "關注我們的社交賬號或成為贊助者，以支援 SideStore 團隊！";
++
++"Change App Icon" = "更改 App 圖示";
++"Personalize your SideStore experience by choosing an alternate app icon." = "選擇其他 App 圖示，個性化你的 SideStore 體驗。";
++
++"Background Refresh" = "後臺刷新";
++"Disable Idle Timeout" = "禁用空閒逾時";
++
++"Storage Explorer" = "儲存空間管理";
++"Clear Data Cache..." = "清除資料快取…";
++"Free up disk space by removing non-essential data, such as temporary files and backups for uninstalled apps." = "移除臨時檔案和已解除安裝 App 的備份等非必要資料，以釋放儲存空間。";
++
++"CREDITS" = "致謝";
++"Developers" = "開發者";
++"UI Designer" = "UI 設計";
++"Asset Designer" = "資源設計";
++"Licenses" = "許可證";
++
++"Enable Beta Updates" = "啟用測試版更新";
++"Beta Updates Track" = "測試版更新通道";
++"Opt in for beta testing to receive regular updates and early previews of upcoming releases." = "加入測試版計劃，定期接收更新並提前體驗即將釋出的版本。";
++"Please note that these builds are experimental and may be unstable or break unexpectedly." = "請注意，這些構建為實驗版本，可能不穩定或出現意外故障。";
++
++"View Refresh Attempts" = "檢視刷新記錄";
++"SideJITServer" = "SideJITServer";
++"Reset Pairing File" = "重置配對檔案";
++"Anisette Servers" = "Anisette 伺服器";
++"Connection Config" = "連線配置";
++"Developer Portal Services" = "開發者門戶服務";
++"Certificate Management" = "憑證管理";
++"Backup & Restore" = "備份與恢復";
++"User Customizations" = "使用者自定義";
++"Developer Options" = "開發者選項";
++"Experimental Features" = "實驗性功能";
++
++"View App IDs" = "檢視 App ID";
++"Refresh App ID cache" = "刷新 App ID 快取";
++"%d App IDs Remaining" = "剩餘 %d 個 App ID";
+diff --git a/AltStore/zh-Hant.lproj/Localizable.strings b/AltStore/zh-Hant.lproj/Localizable.strings
+new file mode 100644
+index 00000000..77a9e9f7
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/Localizable.strings
+@@ -0,0 +1,311 @@
++/* SideStore Simplified Chinese localization */
++
++/* Common */
++"OK" = "確定";
++"Cancel" = "取消";
++"Done" = "完成";
++"Close" = "關閉";
++"Delete" = "刪除";
++"Clear" = "清除";
++"Clear All" = "全部清除";
++"Retry" = "重試";
++"Continue" = "繼續";
++"Save" = "儲存";
++"Reset" = "重置";
++"Import" = "匯入";
++"Export" = "匯出";
++"Install" = "安裝";
++"Refresh" = "刷新";
++"Update" = "更新";
++"Open" = "開啟";
++"Share" = "分享";
++"Search" = "搜尋";
++"Add" = "新增";
++"Remove" = "移除";
++"None" = "無";
++"Enabled" = "已啟用";
++"Disabled" = "已停用";
++"Active" = "有效";
++"Error" = "錯誤";
++"Success" = "成功";
++"Failed" = "失敗";
++"Loading…" = "正在載入…";
++"Copied!" = "已複製！";
++"Copied! " = "已複製！ ";
++"Settings" = "設定";
++"News" = "資訊";
++"Sources" = "源";
++"Browse" = "瀏覽";
++"My Apps" = "我的 App";
++"App IDs" = "App ID";
++"View App IDs" = "檢視 App ID";
++"Expires in" = "剩餘有效期";
++"Refresh All" = "全部刷新";
++"No Updates Available" = "暫無可用更新";
++
++/* Authentication */
++"Welcome to SideStore." = "歡迎使用 SideStore。";
++"Sign in with your Apple ID to get started." = "使用 Apple ID 登入以開始使用。";
++"Sign in with your Apple ID to download apps from SideStore." = "使用 Apple ID 登入，以透過 SideStore 下載 App。";
++"Sign in with Apple ID" = "使用 Apple ID 登入";
++"APPLE ID" = "APPLE ID";
++"PASSWORD" = "密碼";
++"Password" = "密碼";
++"Sign In" = "登入";
++"Sign in" = "登入";
++"SIGN OUT" = "退出登入";
++"ACCOUNT" = "帳號";
++"Account" = "帳號";
++"Name" = "名稱";
++"Apple ID" = "Apple ID";
++"Two-Factor Authentication" = "雙重認證";
++"Trusted device" = "受信任裝置";
++"Apple Authentication" = "Apple 認證";
++"Apple Authentication Error" = "Apple 認證錯誤";
++"Anisette Ready" = "Anisette 已就緒";
++"Authentication Failed" = "認證失敗";
++"Incorrect Apple ID or password." = "Apple ID 或密碼不正確。";
++"Please enter your Apple ID and password." = "請輸入 Apple ID 和密碼。";
++
++/* Sources */
++"No Sources" = "暫無源";
++"Tap the + button to add a source." = "點選 + 按鈕新增源。";
++"View Sources" = "檢視源";
++"Add Source" = "新增源";
++"Source" = "源";
++"Invalid Source" = "無效的源";
++"Could not add source." = "無法新增源。";
++
++/* My Apps / installation */
++"Installing…" = "正在安裝…";
++"Refreshing…" = "正在刷新…";
++"Downloading…" = "正在下載…";
++"Install App" = "安裝 App";
++"Refresh App" = "刷新 App";
++"Deactivate" = "停用";
++"Activate" = "啟用";
++"Sideloaded" = "側載";
++"Installed" = "已安裝";
++"Update Available" = "有可用更新";
++"No Updates" = "暫無更新";
++"Unable to Install App" = "無法安裝 App";
++"Unable to Refresh App" = "無法刷新 App";
++"Operation Failed" = "操作失敗";
++"Operation Succeeded" = "操作成功";
++"App Limit Reached" = "已達到 App 數量限制";
++"App ID Limit Reached" = "已達到 App ID 數量限制";
++"View Refresh Attempts" = "檢視刷新嘗試";
++"Refresh Attempts" = "刷新嘗試";
++"Clear Refresh Attempts" = "清除刷新嘗試記錄";
++"Are you sure you want to clear all existing refresh attempt entries?" = "確定要清除所有現有的刷新嘗試記錄嗎？";
++
++/* Settings */
++"Advanced Settings" = "高階設定";
++"Background Refresh" = "後臺刷新";
++"Disable Idle Timeout" = "禁用空閒逾時";
++"REFRESHING APPS" = "APP 刷新";
++"Enable Background Refresh to automatically refresh apps in the background when connected to Wi-Fi. \n\nEnable Disable Idle Timeout to allow SideStore to keep your device awake during a refresh or install of any apps." = "啟用後臺刷新後，連線 Wi‑Fi 時 SideStore 可在後臺自動刷新 App。\n\n啟用“禁用空閒逾時”後，SideStore 在刷新或安裝 App 期間會保持裝置喚醒。";
++"Reset Pairing File" = "重置配對檔案";
++"Anisette Servers" = "Anisette 伺服器";
++"Connection Configuration" = "連線配置";
++"Developer Portal Services" = "開發者門戶服務";
++"Certificate Management" = "憑證管理";
++"Backup & Restore" = "備份與恢復";
++"User Customizations" = "使用者自定義";
++"Developer Options" = "開發者選項";
++"Experimental Features" = "實驗性功能";
++"Health Check" = "健康檢查";
++"Error Log" = "錯誤日誌";
++"Storage Explorer" = "儲存瀏覽器";
++"Clear Cache" = "清理快取";
++"DISPLAY" = "顯示";
++"APP REFRESH" = "APP 刷新";
++"ADVANCED SETTINGS" = "高階設定";
++"DIAGNOSTICS" = "診斷";
++"BETA TESTING" = "測試版";
++"SUPPORT US" = "支援我們";
++"Follow SideStore for updates" = "關注 SideStore 獲取更新";
++"Send Feedback" = "傳送反饋";
++"Software Licenses" = "軟體許可";
++
++/* Health Check */
++"Action Required" = "需要處理";
++"Core Requirements" = "核心要求";
++"JIT Requirements" = "JIT 要求";
++"Network Connectivity" = "網路連線";
++"Wi-Fi Active" = "Wi‑Fi 已連線";
++"VPN Tunnel (utun)" = "VPN 隧道（utun）";
++"Connected" = "已連線";
++"Disconnected" = "未連線";
++"Device Reachability (Ping)" = "裝置可達性（Ping）";
++"Reachable" = "可達";
++"Pairing file" = "配對檔案";
++"Pairing File" = "配對檔案";
++"Verified" = "已驗證";
++"Loaded" = "已載入";
++"Minimuxer readiness" = "Minimuxer 就緒狀態";
++"Full readiness probe" = "完整就緒探測";
++"Developer Disk Image (DDI)" = "開發者磁碟映像（DDI）";
++"Mounted" = "已掛載";
++"Not Mounted" = "未掛載";
++"Last Sign-In Trace" = "最近登入追蹤";
++"Observed total" = "總耗時";
++"Last updated" = "最後更新";
++"Connection Mode" = "連線模式";
++"Local VPN" = "本地 VPN";
++"Active Protocol" = "目前協議";
++"Remote Pairing" = "遠端配對";
++"Tunnel Interface IP" = "隧道介面 IP";
++"Tunnel Peer IP" = "隧道對端 IP";
++"Override Peer IP" = "覆蓋對端 IP";
++"Override Status" = "覆蓋狀態";
++"Ready" = "已就緒";
++"Not Ready" = "未就緒";
++
++/* Developer Options */
++"LOGGING & DIAGNOSTICS" = "日誌與診斷";
++"Disable URL Response Caching" = "禁用 URL 響應快取";
++"Rotate Logs on Startup" = "啟動時輪轉日誌";
++"SideStore Verbose Logging" = "SideStore 詳細日誌";
++"Widget Verbose Logging" = "小工具詳細日誌";
++"Top Shelf Verbose Logging" = "頂部陳列詳細日誌";
++"AltSign Verbose Logging" = "AltSign 詳細日誌";
++"Minimuxer Verbose Logging" = "Minimuxer 詳細日誌";
++"Operations Verbose Logging" = "操作詳細日誌";
++"Operations Logging Control" = "操作日誌控制";
++"BONJOUR" = "BONJOUR";
++"Network Discovery" = "網路發現";
++"WIDGET OPTIONS" = "小工具選項";
++"TOP SHELF OPTIONS" = "頂部陳列選項";
++"Reload All Widgets" = "重新載入所有小工具";
++"Reload Top Shelf" = "重新載入頂部陳列";
++"Rotate Widget Log" = "輪轉小工具日誌";
++"Rotate Top Shelf Log" = "輪轉頂部陳列日誌";
++"DATABASE OPTIONS" = "資料庫選項";
++"Export Database" = "匯出資料庫";
++"Delete Database" = "刪除資料庫";
++"Clear Keychain Items" = "清除鑰匙圈專案";
++"Wipe Database on Next Start" = "下次啟動時清空資料庫";
++"WIREGUARD CONFIGURATION" = "WIREGUARD 配置";
++"Start EMProxy" = "啟動 EMProxy";
++"Stop EMProxy" = "停止 EMProxy";
++"Show WireGuard Settings" = "顯示 WireGuard 設定";
++"ACCOUNT MANAGEMENT" = "帳號管理";
++"Import Account JSON" = "匯入帳號 JSON";
++"Export Account JSON" = "匯出帳號 JSON";
++"Delete & Exit" = "刪除並退出";
++"Deleting the database will remove all app entries and sources from SideStore." = "刪除資料庫將移除 SideStore 中的所有 App 條目和源。";
++"Export Account" = "匯出帳號";
++"Certificate Password" = "憑證密碼";
++"Please enter a password for the certificate." = "請輸入憑證密碼。";
++"Do you want to clear all keychain items related to this SideStore instance?" = "確定要清除此 SideStore 例項相關的全部鑰匙圈專案嗎？";
++"Started EMProxy" = "EMProxy 已啟動";
++"Stopped EMProxy" = "EMProxy 已停止";
++"Failed to start EMProxy!" = "啟動 EMProxy 失敗！";
++"Failed to stop EMProxy!" = "停止 EMProxy 失敗！";
++"Reloaded All Widgets" = "已重新載入所有小工具";
++"Reloaded Top Shelf" = "已重新載入頂部陳列";
++"Rotated Widget Log" = "已輪轉小工具日誌";
++"Rotated Top Shelf Log" = "已輪轉頂部陳列日誌";
++"Widget Log Empty" = "小工具日誌為空";
++"Top Shelf Log Empty" = "頂部陳列日誌為空";
++"Failed to Rotate Log" = "輪轉日誌失敗";
++"Nothing to rotate." = "沒有可輪轉的內容。";
++
++/* Pairing / networking */
++"Reset Pairing" = "重置配對";
++"Pairing File Required" = "需要配對檔案";
++"Invalid Pairing File" = "無效的配對檔案";
++"Pairing file is invalid or missing." = "配對檔案無效或缺失。";
++"The current pairing file is invalid or missing." = "目前配對檔案無效或缺失。";
++"WireGuard" = "WireGuard";
++"VPN" = "VPN";
++"Connection" = "連線";
++"Connection Failed" = "連線失敗";
++"Connection Error" = "連線錯誤";
++
++/* Certificates / developer portal */
++"Certificates" = "憑證";
++"Certificate" = "憑證";
++"Provisioning Profiles" = "佈署描述檔";
++"Developer Services" = "開發者服務";
++"Developer Portal" = "開發者門戶";
++"Free Developer Account" = "免費開發者帳號";
++"Paid Developer Account" = "付費開發者帳號";
++"Team" = "團隊";
++"Device" = "裝置";
++"Devices" = "裝置";
++
++/* Backup */
++"Backup" = "備份";
++"Restore" = "恢復";
++"Import Account" = "匯入帳號";
++"Failed to export account!" = "匯出帳號失敗！";
++"Failed to export account data!" = "匯出帳號資料失敗！";
++"Failed to import account JSON!" = "匯入帳號 JSON 失敗！";
++"Account not found or missing credentials." = "未找到帳號或憑據缺失。";
++"Account malformed." = "帳號資料格式錯誤。";
++"SideStore should be fully operational!" = "SideStore 現應可正常使用！";
++
++/* Errors / status */
++"An unknown error occurred." = "發生未知錯誤。";
++"Something went wrong." = "出現錯誤。";
++"Please try again." = "請重試。";
++"Timed Out" = "已逾時";
++"Timeout" = "逾時";
++"Not Found" = "未找到";
++"Unavailable" = "不可用";
++"Invalid" = "無效";
++"Missing" = "缺失";
++"Expired" = "已過期";
++"Unknown" = "未知";
++
++
++/* Settings guidance */
++"Personalize the app icon. To switch Chinese or English, open iOS Settings > Apps > SideStore > Language, then reopen SideStore." = "可在此更換應用圖示。如需切換中文或英文，請開啟“系統設定 → App → SideStore → 語言”，選擇語言後重新開啟 SideStore。";
++"Health Check verifies signing and network readiness; Error Log helps diagnose failures; Storage Explorer shows SideStore files; Clear Cache removes temporary data without deleting installed apps." = "“健康檢查”用於確認簽名與網路是否就緒；“錯誤日誌”用於排查失敗原因；“儲存瀏覽器”用於檢視 SideStore 檔案；“清理快取”只刪除臨時資料，不會刪除已安裝的 App。";
++"Feedback reports issues; Refresh Attempts shows refresh history; SideJITServer configures JIT; Pairing File repairs device communication; Anisette Servers support Apple ID authentication; Connection Configuration controls networking; Developer Portal Services manages App IDs, devices, and profiles; Certificate Management manages signing certificates; Backup & Restore protects data; User Customizations contains expert options." = "“傳送反饋”用於報告問題；“刷新嘗試”檢視刷新記錄；“SideJITServer”配置 JIT；“配對檔案”用於修復裝置通訊；“Anisette 伺服器”支援 Apple ID 認證；“連線配置”管理網路連線；“開發者門戶服務”管理 App ID、裝置和佈署描述檔；“憑證管理”管理簽名憑證；“備份與恢復”保護資料；“使用者自定義”包含高階選項。";
++"Developer Options controls logs, database, and WireGuard tools. Experimental Features contains unstable switches intended only for troubleshooting or testing." = "“開發者選項”管理日誌、資料庫和 WireGuard 工具；“實驗性功能”包含尚不穩定的開關，僅建議在排障或測試時使用。";
++"Choose a method to send feedback:" = "選擇反饋方式：";
++"Send Email" = "傳送郵件";
++
++/* Settings information architecture */
++"Change the app icon or open system settings to change the app language." = "更換應用圖示，或開啟系統設定切換應用語言。";
++"Change Language" = "切換語言";
++"Apps refresh automatically on Wi-Fi. Use Disable Idle Timeout only when a refresh or install must keep the device awake." = "連線 Wi‑Fi 時可自動刷新 App。僅在刷新或安裝期間需要保持裝置喚醒時，啟用“禁用空閒逾時”。";
++"Tools for checking status, troubleshooting failures, and managing temporary data." = "用於檢查狀態、排查故障和管理臨時資料的工具。";
++"Advanced tools for pairing, authentication, certificates, networking, and backups. Most users can leave these unchanged." = "用於配對、認證、憑證、網路和備份的高階工具。大多數使用者無需修改。";
++"Optional preview updates. These builds may be unstable." = "可選的預覽更新，可能存在不穩定情況。";
++"Troubleshooting and experimental tools. Change these only when diagnosing a problem." = "用於排障和測試的工具，僅在診斷問題時修改。";
++"Refreshing Apps" = "刷新 App";
++"Tools" = "工具";
++"Advanced settings overview" = "高階設定概覽";
++"Keep the device awake while SideStore refreshes or installs an app." = "SideStore 刷新或安裝 App 時保持裝置喚醒。";
++"Refresh apps automatically when the device is connected to Wi-Fi." = "裝置連線 Wi‑Fi 時自動刷新 App。";
++"Use the switches only when needed. Keeping unnecessary background activity enabled may increase battery usage." = "僅在需要時啟用開關。長期啟用不必要的後臺活動可能增加耗電。";
++"Check signing, network connectivity, pairing, and device readiness." = "檢查簽名、網路連線、配對和裝置就緒狀態。";
++"Review diagnostic logs when an operation fails." = "操作失敗時檢視診斷日誌。";
++"Inspect files stored by SideStore. Do not delete files unless you know what they are." = "檢視 SideStore 儲存的檔案。除非確認用途，否則不要刪除。";
++"Remove temporary data. Installed apps are not deleted." = "刪除臨時資料，不會刪除已安裝的 App。";
++"These options control authentication, pairing, certificates, networking, backups, and developer services. Change them only when you understand the effect." = "這些選項控制認證、配對、憑證、網路、備份和開發者服務。瞭解影響後再修改。";
++"Developer and experimental tools are intended for troubleshooting or testing." = "開發者工具和實驗性工具僅用於排障或測試。";
++
++/* In-app language switching */
++"Tap Change Language to choose Chinese or English. SideStore will restart to apply the new language." = "點選“切換語言”選擇中文或英文。SideStore 將重新啟動以應用新語言。";
++"Choose SideStore language" = "選擇 SideStore 語言";
++"This changes SideStore directly. The app will restart after you choose a language." = "這裡會直接修改 SideStore 的語言。選擇後應用將重新啟動。";
++"Simplified Chinese" = "簡體中文";
++"Language changed" = "語言已切換";
++"SideStore will restart now to apply the new language." = "SideStore 將立即重新啟動以應用新語言。";
++"Restart SideStore" = "重新啟動 SideStore";
++
++"English" = "英文";
++
++// LiveContainer combined installation
++"Resign LiveContainer+SideStore" = "重新簽名 LiveContainer+SideStore";
++"The signing certificate or provisioning profile used to install this app has expired." = "安裝此應用時使用的簽名憑證或佈署描述檔已過期。";
++"LiveContainer+SideStore must be reinstalled with the new signature. This will close the current app. Keep LiveProcess and Widget extensions, then reopen LiveContainer after installation. Do not delete the app to resign it." = "需要使用新簽名重新安裝 LiveContainer+SideStore，操作將退出目前應用。請保留 LiveProcess 和小工具擴充功能，安裝完成後重新開啟 LiveContainer。請勿透過刪除應用來重籤。";
++"Signing target: %@\nCertificate expires: %@\nProfile expires: %@\nUpdate channel: %@" = "簽名物件：%@\n憑證到期：%@\n佈署描述檔到期：%@\n更新管道：%@";
++"The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions." = "重灌包必須為來自目前更新源的 LiveContainer+SideStore 組合版，並保留 LiveProcess 和小工具擴充功能。";
++
++"Version %@%@" = "版本 %@%@";
+diff --git a/AltStore/zh-Hant.lproj/Main.strings b/AltStore/zh-Hant.lproj/Main.strings
+new file mode 100644
+index 00000000..19f958c9
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/Main.strings
+@@ -0,0 +1,12 @@
++/* AltStore/iOS/Main.storyboard */
++"pUx-6k-rtr.title" = "瀏覽";
++"OZm-Le-7oJ.title" = "設定";
++"ZxL-Ws-lJO.title" = "資訊";
++"Uwh-Bg-Ymq.title" = "瀏覽";
++"4gT-9u-k7y.title" = "我的 App";
++"zLJ-Cg-ijh.title" = "我的 App";
++"z04-yg-x1t.text" = "暫無可用更新";
++"NHb-0F-cHZ.normalTitle" = "檢視 App ID";
++"y1A-Nm-mw7.title" = "App ID";
++"cPY-es-fct.title" = "源";
++"SH9-x1-j1n.title" = "資訊";
+diff --git a/AltStore/zh-Hant.lproj/Settings.strings b/AltStore/zh-Hant.lproj/Settings.strings
+new file mode 100644
+index 00000000..853e1388
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/Settings.strings
+@@ -0,0 +1,8 @@
++/* AltStore/Settings/Settings.storyboard */
++"XFa-MY-7cV.text" = "關注 SideStore 獲取更新";
++"7lu-Yk-87t.text" = "使用 Apple ID 登入";
++"xvY-lN-Toz.text" = "名稱";
++"EbG-HB-IOn.text" = "後臺刷新";
++"PCh-Up-aJJ.text" = "禁用空閒逾時";
++"hlt-Ch-lbl.text" = "健康檢查";
++"jFh-36-AP2.text" = "開發者選項";
+diff --git a/AltStore/zh-Hant.lproj/Sources.strings b/AltStore/zh-Hant.lproj/Sources.strings
+new file mode 100644
+index 00000000..266a6ab9
+--- /dev/null
++++ b/AltStore/zh-Hant.lproj/Sources.strings
+@@ -0,0 +1,8 @@
++/* AltStore/Sources/Sources.storyboard */
++"wln-zM-XsK.title" = "源";
++"YT5-2D-g4i.text" = "暫無源";
++"kMq-uN-HhE.text" = "點選 + 按鈕新增源。";
++"7cX-eH-K1j.normalTitle" = "檢視源";
++"Mmg-3r-azN.title" = "無";
++"XwW-2R-otJ.title" = "新增";
++"IJI-wz-YWl.title" = "新增源";
+diff --git a/Shared/Extensions/Bundle+AltStore.swift b/Shared/Extensions/Bundle+AltStore.swift
+index aa34164b..6c158fdc 100644
+--- a/Shared/Extensions/Bundle+AltStore.swift
++++ b/Shared/Extensions/Bundle+AltStore.swift
+@@ -25,7 +25,7 @@ public extension Bundle
+             let info = activeBundle.infoDictionary
+             let version = (info?["CFBundleShortVersionString"] as? String) ?? "?.?.?"
+             let build = (info?["CFBundleVersion"] as? String).map { " (\($0))" } ?? "(????)"
+-            return NSLocalizedString(String(format: "Version %@%@", version, build), comment: "SideStore Version")
++            return String(format: NSLocalizedString("Version %@%@", comment: "SideStore Version"), version, build)
+         }()
+         public static let activeBundleIdentifier: String = activeBundle.bundleIdentifier!
+         public static let storeAppBundleIdentifier = Bundle.storeAppBundleIdentifier
+diff --git a/Shared/Localization/LocalizedResourceLookup.swift b/Shared/Localization/LocalizedResourceLookup.swift
+new file mode 100644
+index 00000000..5f4b6aa9
+--- /dev/null
++++ b/Shared/Localization/LocalizedResourceLookup.swift
+@@ -0,0 +1,16 @@
++import Foundation
++
++/// Lookup in the owning module, with an explicit English fallback.
++public enum LocalizedResourceLookup {
++    public static func text(bundle: Bundle, language: String, key: String,
++                            fallback: String, table: String) -> String {
++        let missing = "__SideStoreLocalizationMissing__"
++        for code in [language, "en", "Base"] {
++            guard let path = bundle.path(forResource: code, ofType: "lproj"),
++                  let localizedBundle = Bundle(path: path) else { continue }
++            let value = localizedBundle.localizedString(forKey: key, value: missing, table: table)
++            if value != missing { return value }
++        }
++        return fallback
++    }
++}
+diff --git a/Shared/Localization/SideStoreLanguagePolicy.swift b/Shared/Localization/SideStoreLanguagePolicy.swift
+new file mode 100644
+index 00000000..03a844cb
+--- /dev/null
++++ b/Shared/Localization/SideStoreLanguagePolicy.swift
+@@ -0,0 +1,32 @@
++import Foundation
++
++/// A process-independent policy shared by foreground UI, extensions and tests.
++/// "system" follows the containing app's languages when embedded in LiveContainer.
++public enum SideStoreLanguagePolicy {
++    public static let preferenceKey = "SideStorePreferredLanguage"
++    public static let supportedLanguages = ["en", "zh-Hans", "zh-Hant"]
++
++    public static func resolve(preference: String?, inheritedLanguages: [String]) -> String {
++        if let preference, supportedLanguages.contains(preference) { return preference }
++        for identifier in inheritedLanguages {
++            let parts = identifier.replacingOccurrences(of: "_", with: "-").lowercased().split(separator: "-")
++            guard let language = parts.first else { continue }
++            if language == "en" { return "en" }
++            if language == "zh" {
++                if parts.contains("hant") { return "zh-Hant" }
++                if parts.contains("hans") { return "zh-Hans" }
++                return parts.contains(where: { ["tw", "hk", "mo"].contains(String($0)) }) ? "zh-Hant" : "zh-Hans"
++            }
++        }
++        return "en"
++    }
++
++    public static func inheritedLanguages(environment: [String: String] = ProcessInfo.processInfo.environment,
++                                          fallback: [String] = Locale.preferredLanguages) -> [String] {
++        guard let value = environment["LC_HOST_LANGUAGES"],
++              let data = value.data(using: .utf8),
++              let languages = try? JSONDecoder().decode([String].self, from: data),
++              !languages.isEmpty else { return fallback }
++        return languages
++    }
++}
+diff --git a/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift b/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift
+index 2ecb61b7..8698d475 100644
+--- a/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift
++++ b/SideStore/Core/Operations/StandaloneOperations/DownloadAppOperation.swift
+@@ -134,6 +134,23 @@ final class DownloadAppOperation: BasePipelineOperation<InstallAppOperationConte
+         }
+         
+         let appBundle = try await downloadIPA(from: sourceURL)
++
++        // Embedded SideStore reinstalls its host. Reject a standalone or foreign
++        // channel package before resigning or altering the installed application.
++        let host = Bundle.Info.activeBundle
++        if self.context.bundleIdentifier == Bundle.Info.appbundleIdentifier,
++           let expectedSource = host.object(forInfoDictionaryKey: "LCSideStoreSourceURL") as? String {
++            let candidate = appBundle.bundle
++            let candidateID = candidate.object(forInfoDictionaryKey: "ALTBundleIdentifier") as? String ?? appBundle.bundleIdentifier
++            let paths = ["Frameworks/SideStoreApp.framework/SideStore",
++                         "PlugIns/LiveProcess.appex", "PlugIns/LiveWidgetExtension.appex"]
++            guard candidateID == Bundle.Info.appbundleIdentifier,
++                  candidate.object(forInfoDictionaryKey: "LCSideStoreSourceURL") as? String == expectedSource,
++                  paths.allSatisfy({ FileManager.default.fileExists(atPath: candidate.bundleURL.appendingPathComponent($0).path) }) else {
++                throw OperationError.invalidParameters(SideStoreLocalization.text("package.invalid_combined", default: "The reinstall package must be LiveContainer+SideStore from the current update source and retain LiveProcess and Widget extensions."))
++            }
++        }
++
+         
+         if self.context.bundleIdentifier == StoreApp.dolphinAppID, self.context.bundleIdentifier != appBundle.bundleIdentifier {
+             if var infoPlist = NSDictionary(contentsOf: appBundle.bundle.infoPlistURL) as? [String: Any] {
+diff --git a/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift b/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift
+index b68bde1c..9c61fa52 100644
+--- a/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift
++++ b/SideStore/Views/Settings/Advanced/Certificates/ActiveCertSectionView.swift
+@@ -15,7 +15,7 @@ struct ActiveCertSectionView: View {
+     var onDeactivate: () -> Void
+     
+     var body: some View {
+-        Section("Active Local Certificate") {
++        Section(SideStoreLocalization.text("cert.active_section", default: "Active Local Certificate")) {
+             if let activeSerial = viewModel.activeSerialNumber {
+                 HStack {
+                     Image(systemName: "checkmark.seal.fill")
+@@ -24,7 +24,7 @@ struct ActiveCertSectionView: View {
+                     
+                     VStack(alignment: .leading) {
+                         HStack(spacing: 6) {
+-                            Text("Active Signing Certificate").font(.headline)
++                            Text(SideStoreLocalization.text("cert.active", default: "Active Signing Certificate")).font(.headline)
+                             
+                             #if !os(tvOS)
+                             SwiftUI.Button {
+@@ -43,7 +43,7 @@ struct ActiveCertSectionView: View {
+                         
+                         let displaySerial = viewModel.displayActiveSerial(activeSerial)
+                         (
+-                            Text("SN: ").font(.footnote)
++                            Text(SideStoreLocalization.text("cert.serial_prefix", default: "SN: ")).font(.footnote)
+                             + Text(displaySerial).font(.system(size: 13, design: .monospaced))
+                         )
+                         .foregroundColor(.secondary)
+@@ -60,7 +60,7 @@ struct ActiveCertSectionView: View {
+                                 Image(systemName: "exclamationmark.triangle.fill")
+                                     .foregroundColor(.orange)
+                                     .font(.footnote)
+-                                Text("Custom third-party certificate (different team)")
++                                Text(SideStoreLocalization.text("cert.third_party", default: "Custom third-party certificate (different team)"))
+                                     .font(.caption)
+                                     .foregroundColor(.orange)
+                             }
+@@ -77,12 +77,12 @@ struct ActiveCertSectionView: View {
+                         if viewModel.revealedSerials.contains(key) { viewModel.revealedSerials.remove(key) }
+                         else { viewModel.revealedSerials.insert(key) }
+                     } label: {
+-                        Label(isMasked ? "Reveal Details" : "Hide Details",
++                        Label(isMasked ? SideStoreLocalization.text("cert.reveal", default: "Reveal Details") : SideStoreLocalization.text("cert.hide", default: "Hide Details"),
+                               systemImage: isMasked ? "eye" : "eye.slash")
+                     }
+                     #if !os(tvOS)
+                     SwiftUI.Button { UIPasteboard.general.string = activeSerial } label: {
+-                        Label("Copy S/N", systemImage: "doc.on.doc")
++                        Label(SideStoreLocalization.text("cert.copy_serial", default: "Copy S/N"), systemImage: "doc.on.doc")
+                     }
+                     #endif
+                 }
+@@ -90,13 +90,13 @@ struct ActiveCertSectionView: View {
+                 HStack {
+                     Image(systemName: "checkmark.seal.fill").font(.title2).opacity(0)
+                     SwiftUI.Button(role: .destructive) { onDeactivate() } label: {
+-                        Text("Deactivate Locally").fontWeight(.medium)
++                        Text(SideStoreLocalization.text("cert.deactivate", default: "Deactivate Locally")).fontWeight(.medium)
+                     }
+                 }
+             } else {
+                 Text(viewModel.team == nil
+-                     ? "No active local certificate found.Import a .p12 file to sign your apps."
+-                     : "No active local certificate found.Create a new certificate or import a .p12 file to sign your apps.")
++                     ? SideStoreLocalization.text("cert.empty_import", default: "No active local certificate found.Import a .p12 file to sign your apps.")
++                     : SideStoreLocalization.text("cert.empty_create", default: "No active local certificate found.Create a new certificate or import a .p12 file to sign your apps."))
+                     .foregroundColor(.secondary)
+                     .font(.subheadline)
+             }
+diff --git a/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift b/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift
+index 5e1e86ad..a91b3bb3 100644
+--- a/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift
++++ b/SideStore/Views/Settings/Advanced/Certificates/PrivateKeyTextInputView.swift
+@@ -32,7 +32,7 @@ struct PrivateKeyTextInputView: View {
+                         .padding(.horizontal)
+                 }
+                 
+-                Text("Paste your PEM-formatted private key below, or import it from a text file.")
++                Text(SideStoreLocalization.text("key.paste", default: "Paste your PEM-formatted private key below, or import it from a text file."))
+                     .font(.subheadline)
+                     .foregroundColor(.secondary)
+                     .padding(.horizontal)
+@@ -57,7 +57,7 @@ struct PrivateKeyTextInputView: View {
+                         if let topVC = UIApplication.shared.topViewController() {
+                             TVWebFileTransferManager.shared.startImport(
+                                 acceptedExtensions: ["pem", "key", "txt"],
+-                                title: "Import PEM Private Key File",
++                                title: SideStoreLocalization.text("key.import_pem", default: "Import PEM Private Key File"),
+                                 presentingVC: topVC
+                             ) { fileURL in
+                                 guard let fileURL = fileURL else { return }
+@@ -67,13 +67,13 @@ struct PrivateKeyTextInputView: View {
+                                     isEditing = false
+                                     errorMessage = nil
+                                 } catch {
+-                                    errorMessage = "Failed to read file: \(error.localizedDescription)"
++                                    errorMessage = SideStoreLocalization.format("key.read_failed", default: "Failed to read file: %@", error.localizedDescription)
+                                 }
+                             }
+                         }
+                         #endif
+                     } label: {
+-                        Label("Import from File", systemImage: "doc.badge.plus")
++                        Label(SideStoreLocalization.text("key.import_file", default: "Import from File"), systemImage: "doc.badge.plus")
+                             .frame(maxWidth: .infinity)
+                             .padding(.vertical, 8)
+                     }
+@@ -92,7 +92,7 @@ struct PrivateKeyTextInputView: View {
+                             }
+                         }
+                     } label: {
+-                        Text("Add PEM Key")
++                        Text(SideStoreLocalization.text("key.add_pem", default: "Add PEM Key"))
+                             .frame(maxWidth: .infinity)
+                             .padding(.vertical, 8)
+                     }
+@@ -102,14 +102,14 @@ struct PrivateKeyTextInputView: View {
+                 .padding(.horizontal)
+                 .padding(.bottom)
+             }
+-            .navigationTitle("Add Private Key")
++            .navigationTitle(SideStoreLocalization.text("key.add", default: "Add Private Key"))
+             #if !os(tvOS)
+             .navigationBarTitleDisplayMode(.inline)
+             #endif
+             .toolbar {
+                 ToolbarItem(placement: .confirmationAction) {
+                     if isEditing {
+-                        SwiftUI.Button("Done") {
++                        SwiftUI.Button(SideStoreLocalization.text("common.done", default: "Done")) {
+                             isEditing = false
+                         }
+                     } else {
+@@ -138,20 +138,20 @@ struct PrivateKeyTextInputView: View {
+                             isEditing = false
+                             errorMessage = nil
+                         } catch {
+-                            errorMessage = "Failed to read file: \(error.localizedDescription)"
++                            errorMessage = SideStoreLocalization.format("key.read_failed", default: "Failed to read file: %@", error.localizedDescription)
+                         }
+                     }
+                 case .failure(let error):
+-                    errorMessage = "Failed to select file: \(error.localizedDescription)"
++                    errorMessage = SideStoreLocalization.format("key.select_failed", default: "Failed to select file: %@", error.localizedDescription)
+                 }
+             }
+             #endif
+-            .alert("Key Added", isPresented: $showSuccessAlert) {
+-                SwiftUI.Button("OK") {
++            .alert(SideStoreLocalization.text("key.added", default: "Key Added"), isPresented: $showSuccessAlert) {
++                SwiftUI.Button(SideStoreLocalization.text("common.ok", default: "OK")) {
+                     onCancel()
+                 }
+             } message: {
+-                Text("Key was added to certificate \(cert.name) (SN: \(cert.serialNumber)).")
++                Text(SideStoreLocalization.format("key.added_detail", default: "Key was added to certificate %@ (SN: %@).", cert.name, cert.serialNumber))
+             }
+         }
+     }
+diff --git a/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift b/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift
+index e2d6b48d..f8be8ec4 100644
+--- a/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift
++++ b/SideStore/Views/Settings/Advanced/Certificates/RevokeAlertViewController.swift
+@@ -41,7 +41,7 @@ class RevokeAlertViewController: UIViewController {
+         keepLocalCheckboxButton.addTarget(self, action: #selector(toggleKeepLocalCheckbox), for: .touchUpInside)
+         
+         let label = UILabel()
+-        label.text = NSLocalizedString("Keep Local Certificate", comment: "")
++        label.text = SideStoreLocalization.text("cert.keep_local", default: "Keep Local Certificate")
+         label.font = .systemFont(ofSize: 14)
+         label.isUserInteractionEnabled = true
+         let tap = UITapGestureRecognizer(target: self, action: #selector(toggleKeepLocalCheckbox))
+diff --git a/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift b/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift
+index a7a7ca8e..9c8b13d9 100644
+--- a/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift
++++ b/SideStore/Views/Settings/Auth/RevokeCertificatesAlertViewController.swift
+@@ -82,20 +82,24 @@ class RevokeCertificatesAlertViewController: UIViewController {
+             titleLabel.text = "\(index + 1). \(certName)"
+             titleLabel.font = .systemFont(ofSize: 13, weight: .semibold)
+             titleLabel.textColor = .label
+-            titleLabel.numberOfLines = 1
++            titleLabel.numberOfLines = 0
+ 
+             let serialLabel = UILabel()
+-            serialLabel.text = "Serial: \(cert.serialNumber)"
++            serialLabel.text = SideStoreLocalization.format("cert.serial", default: "Serial: %@", cert.serialNumber)
+             serialLabel.font = .systemFont(ofSize: 11, weight: .regular)
+             serialLabel.textColor = .secondaryLabel
+             serialLabel.numberOfLines = 1
+ 
+             let expLabel = UILabel()
+-            let expDate = cert.expiryDate != Date.distantPast ? ISO8601DateFormatter().string(from: cert.expiryDate) : "Unknown"
+-            expLabel.text = "Expires: \(expDate.prefix(10))"
++            let formatter = DateFormatter()
++            formatter.locale = SideStoreLocalization.locale
++            formatter.dateStyle = .medium
++            formatter.timeStyle = .none
++            let expDate = cert.expiryDate != Date.distantPast ? formatter.string(from: cert.expiryDate) : SideStoreLocalization.text("common.unknown", default: "Unknown")
++            expLabel.text = SideStoreLocalization.format("cert.expires", default: "Expires: %@", expDate)
+             expLabel.font = .systemFont(ofSize: 11, weight: .regular)
+             expLabel.textColor = .secondaryLabel
+-            expLabel.numberOfLines = 1
++            expLabel.numberOfLines = 0
+ 
+             detailStack.addArrangedSubview(titleLabel)
+             detailStack.addArrangedSubview(serialLabel)
+diff --git a/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift b/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift
+index 58924cd3..a56217d6 100644
+--- a/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift
++++ b/SideStore/Views/Settings/Auth/SignOutAlertViewController.swift
+@@ -48,7 +48,7 @@ class SignOutAlertViewController: UIViewController {
+         certCheckboxButton.addTarget(self, action: #selector(toggleCertCheckbox), for: .touchUpInside)
+         
+         let certLabel = UILabel()
+-        certLabel.text = NSLocalizedString("Keep signing certificate", comment: "")
++        certLabel.text = SideStoreLocalization.text("account.keep_certificate", default: "Keep signing certificate")
+         certLabel.font = .systemFont(ofSize: 14)
+         certLabel.isUserInteractionEnabled = true
+         let certTap = UITapGestureRecognizer(target: self, action: #selector(toggleCertCheckbox))
+@@ -70,7 +70,7 @@ class SignOutAlertViewController: UIViewController {
+         anisetteCheckboxButton.addTarget(self, action: #selector(toggleAnisetteCheckbox), for: .touchUpInside)
+         
+         let anisetteLabel = UILabel()
+-        anisetteLabel.text = NSLocalizedString("Keep Anisette data", comment: "")
++        anisetteLabel.text = SideStoreLocalization.text("account.keep_anisette", default: "Keep Anisette data")
+         anisetteLabel.font = .systemFont(ofSize: 14)
+         anisetteLabel.isUserInteractionEnabled = true
+         let anisetteTap = UITapGestureRecognizer(target: self, action: #selector(toggleAnisetteCheckbox))
+diff --git a/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift b/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift
+index b679a97d..c6ec4a1b 100644
+--- a/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift
++++ b/SideStore/Views/Settings/TechyThings/HealthCheck/HealthCheckView.swift
+@@ -19,7 +19,7 @@ private func formattedHealthDuration(_ milliseconds: Int?) -> String? {
+ }
+ 
+ private func healthLocalized(_ key: String) -> String {
+-    NSLocalizedString(key, comment: "")
++    SideStoreLocalization.legacyText(key)
+ }
+ 
+ struct HealthCheckView: View {
+diff --git a/scripts/ci/check_zh_hans_ui_coverage.py b/scripts/ci/check_zh_hans_ui_coverage.py
+index 17997d86..b457b43d 100644
+--- a/scripts/ci/check_zh_hans_ui_coverage.py
++++ b/scripts/ci/check_zh_hans_ui_coverage.py
+@@ -90,6 +90,7 @@ def main() -> None:
+         fail("English fallback remains for: " + ", ".join(repr(item) for item in untranslated))
+ 
+     helper = HELPER.read_text(encoding="utf-8")
++    helper += (ROOT / "AltStore/Core/Utilities/SideStoreLocalization.swift").read_text(encoding="utf-8")
+     for marker in (
+         'table: "InterfaceFallback"',
+         '" App ID Remaining"',
+diff --git a/scripts/ci/verify_language_switch.py b/scripts/ci/verify_language_switch.py
+index 09980a64..92500edf 100644
+--- a/scripts/ci/verify_language_switch.py
++++ b/scripts/ci/verify_language_switch.py
+@@ -23,10 +23,12 @@ def main() -> None:
+ 
+     required_settings = [
+         "enum SideStoreLanguage: String, CaseIterable",
+-        'UserDefaults.standard.string(forKey: "SideStorePreferredLanguage")',
+-        'UserDefaults.standard.set(language.rawValue, forKey: "SideStorePreferredLanguage")',
++        'UserDefaults.standard.string(forKey: SideStoreLanguagePolicy.preferenceKey)',
++        'UserDefaults.standard.set(language.rawValue, forKey: SideStoreLanguagePolicy.preferenceKey)',
+         'UserDefaults.standard.set([language.rawValue], forKey: "AppleLanguages")',
+-        'UserDefaults.standard.set(language.localeIdentifier, forKey: "AppleLocale")',
++        'case system',
++        'case traditionalChinese',
++        'UserDefaults.standard.removeObject(forKey: "AppleLanguages")',
+         "UIAlertController(",
+         "SideStoreLanguage.allCases",
+         "Restart SideStore",
+@@ -36,6 +38,9 @@ def main() -> None:
+     if missing_settings:
+         fail("settings implementation is missing: " + ", ".join(missing_settings))
+ 
++    if 'set(language.localeIdentifier, forKey: "AppleLocale")' in settings:
++        fail("language selection must preserve regional formatting preferences")
++
+     if "UIApplication.openSettingsURLString" in settings:
+         fail("language switch must not be a system-settings-only redirect")
+ 

@@ -73,6 +73,29 @@ void NUDGuestHooksInit(void) {
 
 #if !TARGET_OS_SIMULATOR
     NSString* selectedLanguage = NSUserDefaults.guestAppInfo[@"LCSelectedLanguage"];
+    if (NSUserDefaults.isSideStore) {
+        NSString *sideStorePreference = [newStandardUserDefaults stringForKey:@"SideStorePreferredLanguage"];
+        NSArray *supportedLanguages = @[@"en", @"zh-Hans", @"zh-Hant"];
+        if ([supportedLanguages containsObject:sideStorePreference]) {
+            selectedLanguage = sideStorePreference;
+        } else {
+            const char *snapshot = getenv("LC_HOST_LANGUAGES");
+            NSData *snapshotData = snapshot ? [[NSString stringWithUTF8String:snapshot] dataUsingEncoding:NSUTF8StringEncoding] : nil;
+            id inherited = snapshotData ? [NSJSONSerialization JSONObjectWithData:snapshotData options:0 error:nil] : nil;
+            BOOL validSnapshot = [inherited isKindOfClass:NSArray.class] && [inherited count] > 0;
+            if (validSnapshot) {
+                for (id identifier in inherited) {
+                    if (![identifier isKindOfClass:NSString.class]) { validSnapshot = NO; break; }
+                }
+            }
+            NSArray *languages = validSnapshot ? inherited : NSLocale.preferredLanguages;
+            selectedLanguage = [NSBundle preferredLocalizationsFromArray:supportedLanguages forPreferences:languages].firstObject ?: @"en";
+        }
+        // Mirror SideStore's resolved language in its guest domain so legacy
+        // storyboard/SwiftUI text agrees with the explicit localization service.
+        // Host preferences and other guest-app overrides remain independent.
+    }
+
     if(selectedLanguage) {
         [newStandardUserDefaults setObject:@[selectedLanguage] forKey:@"AppleLanguages"];
         CFMutableArrayRef* _CFBundleUserLanguages = getCachedSymbol(@"__CFBundleUserLanguages", coreFoundationHeader);

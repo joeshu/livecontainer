@@ -18,6 +18,10 @@
 #import "Tweaks/Tweaks.h"
 #include <mach-o/ldsyms.h>
 
+@interface NSObject (LCRefreshRecoveryBootstrap)
++ (void)recoverOnLaunch;
+@end
+
 extern char **environ;
 static int (*appMain)(int, char**, char**);
 NSUserDefaults *lcUserDefaults;
@@ -615,6 +619,7 @@ static NSString* invokeAppMain(NSString *selectedApp, NSString *selectedContaine
         } else if (isLiveProcess && isSideStore) {
             dlopen([lcMainBundle.bundlePath stringByAppendingPathComponent:@"../../Frameworks/SideStoreSupport.framework/SideStoreSupport"].UTF8String, RTLD_LAZY);
         }
+        if (!isLiveProcess) [NSClassFromString(@"LCRefreshRecovery") recoverOnLaunch];
     }
     
     // Fix dynamic properties of some apps
@@ -664,6 +669,12 @@ static void exceptionHandler(NSException *exception) {
 int LiveContainerMain(int argc, char *argv[]) {
     lcMainBundle = [NSBundle mainBundle];
     lcUserDefaults = NSUserDefaults.standardUserDefaults;
+    // Snapshot the containing application's language order before redirecting
+    // preferences and CoreFoundation caches into a guest app's domain.
+    NSData *hostLanguages = [NSJSONSerialization dataWithJSONObject:NSLocale.preferredLanguages options:0 error:nil];
+    NSString *hostLanguagesJSON = hostLanguages ? [[NSString alloc] initWithData:hostLanguages encoding:NSUTF8StringEncoding] : nil;
+    if (hostLanguagesJSON) setenv("LC_HOST_LANGUAGES", hostLanguagesJSON.UTF8String, 1);
+
     
     lcSharedDefaults = [[NSUserDefaults alloc] initWithSuiteName: [LCSharedUtils appGroupID]];
     lcAppUrlScheme = NSBundle.mainBundle.infoDictionary[@"CFBundleURLTypes"][0][@"CFBundleURLSchemes"][0];
@@ -851,6 +862,7 @@ int LiveContainerMain(int argc, char *argv[]) {
     
     if(sideStoreExist) {
         void* sideStoreHandle = dlopen("@executable_path/Frameworks/SideStoreSupport.framework/SideStoreSupport", RTLD_LAZY);
+        [NSClassFromString(@"LCRefreshRecovery") recoverOnLaunch];
     }
 
     if ([lcUserDefaults boolForKey:@"LCLoadTweaksToSelf"]) {

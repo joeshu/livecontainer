@@ -33,6 +33,7 @@ enum JITEnablerType : Int, CaseIterable, Identifiable {
 }
 
 struct LCSettingsView: View {
+    @State private var refreshStatus: [String: Any] = [:]
     @State var errorShow = false
     @State var errorInfo = ""
     @State var successShow = false
@@ -308,6 +309,10 @@ struct LCSettingsView: View {
                     Text("lc.settings.warning".loc)
                 }
                 
+                if !refreshStatus.isEmpty {
+                    LCRefreshRecoverySection(status: refreshStatus)
+                }
+
                 VStack{
                     Text(LCUtils.getVersionInfo())
                         .foregroundStyle(.gray)
@@ -378,6 +383,16 @@ struct LCSettingsView: View {
                 }
             }
             .navigationBarTitle("lc.tabView.settings".loc)
+            .task {
+                while !Task.isCancelled {
+                    let next = LCUtils.refreshRecoveryStatus() ?? [:]
+                    if !(refreshStatus as NSDictionary).isEqual(next as NSDictionary) {
+                        refreshStatus = next
+                    }
+                    do { try await Task.sleep(nanoseconds: 5_000_000_000) }
+                    catch { return }
+                }
+            }
             .alert("lc.common.error".loc, isPresented: $errorShow){
             } message: {
                 Text(errorInfo)
@@ -484,7 +499,11 @@ struct LCSettingsView: View {
 
     func export() {
         let fileManager = FileManager.default
-        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            errorInfo = CocoaError(.fileNoSuchFile).localizedDescription
+            errorShow = true
+            return
+        }
         
         // 1. Copy embedded.mobileprovision from the main bundle to Documents
         if let embeddedURL = Bundle.main.url(forResource: "embedded", withExtension: "mobileprovision") {
@@ -503,7 +522,7 @@ struct LCSettingsView: View {
         if let certData = LCUtils.certificateData() {
             let certFileURL = documentsURL.appendingPathComponent("cert.p12")
             do {
-                try certData.write(to: certFileURL)
+                try certData.write(to: certFileURL, options: .atomic)
                 print("Successfully wrote certData to cert.p12 in Documents.")
             } catch {
                 print("Error writing certData to cert.p12: \(error)")
@@ -529,7 +548,11 @@ struct LCSettingsView: View {
     func exportMainBundle() {
         let url = Bundle.main.bundleURL
         let fileManager = FileManager.default
-        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            errorInfo = CocoaError(.fileNoSuchFile).localizedDescription
+            errorShow = true
+            return
+        }
         do {
             let destinationURL = documentsURL.appendingPathComponent(url.lastPathComponent)
             try fileManager.copyItem(at: url, to: destinationURL)
@@ -689,7 +712,11 @@ struct LCSettingsView: View {
     func exportDyld() {
         let url = URL(fileURLWithPath: "/usr/lib/dyld")
         let fileManager = FileManager.default
-        let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first!
+        guard let documentsURL = fileManager.urls(for: .documentDirectory, in: .userDomainMask).first else {
+            errorInfo = CocoaError(.fileNoSuchFile).localizedDescription
+            errorShow = true
+            return
+        }
         do {
             let destinationURL = documentsURL.appendingPathComponent(url.lastPathComponent)
             try fileManager.copyItem(at: url, to: destinationURL)

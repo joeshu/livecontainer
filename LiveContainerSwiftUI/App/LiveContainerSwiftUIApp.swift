@@ -20,76 +20,36 @@ struct LiveContainerSwiftUIApp : SwiftUI.App {
         var tempHiddenApps: [LCAppModel] = []
         var tempURLSchemes: Set<String>? = DataManager.shared.model.multiLCStatus != 2 ? Set() : nil
 
-        do {
-            // load apps
-            try fm.createDirectory(at: LCPath.bundlePath, withIntermediateDirectories: true)
-            let appDirs = try fm.contentsOfDirectory(atPath: LCPath.bundlePath.path)
-            for appDir in appDirs {
-                if !appDir.hasSuffix(".app") {
-                    continue
-                }
-                let newApp = LCAppInfo(bundlePath: "\(LCPath.bundlePath.path)/\(appDir)")!
-                newApp.relativeBundlePath = appDir
-                newApp.isShared = false
-                let model = LCAppModel(appInfo: newApp)
-                if newApp.isHidden {
-                    tempHiddenApps.append(model)
-                } else {
-                    tempApps.append(model)
-                    tempURLSchemes?.formUnion(newApp.urlSchemes() as! [String])
-                }
-                if newApp.is32bitEmulator {
-                    tempArm32EmuApps.append(model)
-                }
-            }
-            if LCPath.lcGroupDocPath != LCPath.docPath {
-                try fm.createDirectory(at: LCPath.lcGroupBundlePath, withIntermediateDirectories: true)
-                let appDirsShared = try fm.contentsOfDirectory(atPath: LCPath.lcGroupBundlePath.path)
-                for appDir in appDirsShared {
-                    if !appDir.hasSuffix(".app") {
-                        continue
-                    }
-                    let newApp = LCAppInfo(bundlePath: "\(LCPath.lcGroupBundlePath.path)/\(appDir)")!
-                    newApp.relativeBundlePath = appDir
-                    newApp.isShared = true
+        // Each storage area is independent: failure in shared storage must not
+        // stop private containers or tweaks from being indexed.
+        for (root, shared) in [(LCPath.bundlePath, false), (LCPath.lcGroupBundlePath, true)] {
+            if shared && LCPath.lcGroupDocPath == LCPath.docPath { continue }
+            do {
+                for appURL in try LCFileOperations.directories(in: root, fileManager: fm) where appURL.pathExtension == "app" {
+                    guard let newApp = LCAppInfo(bundlePath: appURL.path) else { continue }
+                    newApp.relativeBundlePath = appURL.lastPathComponent
+                    newApp.isShared = shared
                     let model = LCAppModel(appInfo: newApp)
                     if newApp.isHidden {
                         tempHiddenApps.append(model)
                     } else {
                         tempApps.append(model)
-                        tempURLSchemes?.formUnion(newApp.urlSchemes() as! [String])
+                        if let schemes = newApp.urlSchemes() { tempURLSchemes?.formUnion(schemes.compactMap { $0 as? String }) }
                     }
-                    if newApp.is32bitEmulator {
-                        tempArm32EmuApps.append(model)
-                    }
+                    if newApp.is32bitEmulator { tempArm32EmuApps.append(model) }
                 }
-            }
-            // load document folders
-            try fm.createDirectory(at: LCPath.dataPath, withIntermediateDirectories: true)
-            let dataDirs = try fm.contentsOfDirectory(atPath: LCPath.dataPath.path)
-            for dataDir in dataDirs {
-                let dataDirUrl = LCPath.dataPath.appendingPathComponent(dataDir)
-                if !dataDirUrl.hasDirectoryPath {
-                    continue
-                }
-                tempAppDataFolderNames.append(dataDir)
-            }
-            
-            // load tweak folders
-            try fm.createDirectory(at: LCPath.tweakPath, withIntermediateDirectories: true)
-            let tweakDirs = try fm.contentsOfDirectory(atPath: LCPath.tweakPath.path)
-            for tweakDir in tweakDirs {
-                let tweakDirUrl = LCPath.tweakPath.appendingPathComponent(tweakDir)
-                if !tweakDirUrl.hasDirectoryPath {
-                    continue
-                }
-                let folderName = tweakDir.hasSuffix(".disabled") ? String(tweakDir.dropLast(".disabled".count)) : tweakDir
-                tempTweakFolderNames.append(folderName)
-            }
-        } catch {
-            NSLog("[LC] error:\(error)")
+            } catch { NSLog("[LC] App index unavailable: %@", error.localizedDescription) }
         }
-        
+        do {
+            tempAppDataFolderNames = try LCFileOperations.directories(in: LCPath.dataPath, fileManager: fm).map(\.lastPathComponent)
+        } catch { NSLog("[LC] Container index unavailable: %@", error.localizedDescription) }
+        do {
+            tempTweakFolderNames = try LCFileOperations.directories(in: LCPath.tweakPath, fileManager: fm).map {
+                let name = $0.lastPathComponent
+                return name.hasSuffix(".disabled") ? String(name.dropLast(".disabled".count)) : name
+            }
+        } catch { NSLog("[LC] Tweak index unavailable: %@", error.localizedDescription) }
+
         DataManager.shared.model.apps = tempApps
         DataManager.shared.model.arm32EmuApps = tempArm32EmuApps
         DataManager.shared.model.hiddenApps = tempHiddenApps

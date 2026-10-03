@@ -663,13 +663,13 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
         let decompressProgress = Progress.discreteProgress(totalUnitCount: 100)
         installProgress.addChild(decompressProgress, withPendingUnitCount: 80)
-        let payloadPath = fm.temporaryDirectory.appendingPathComponent("Payload")
-        if fm.fileExists(atPath: payloadPath.path) {
-            try fm.removeItem(at: payloadPath)
-        }
+        let extractionRoot = fm.temporaryDirectory.appendingPathComponent("LCInstall-" + UUID().uuidString, isDirectory: true)
+        try fm.createDirectory(at: extractionRoot, withIntermediateDirectories: true)
+        defer { try? fm.removeItem(at: extractionRoot) }
+        let payloadPath = extractionRoot.appendingPathComponent("Payload", isDirectory: true)
         
         // decompress
-        guard await decompress(url.path, fm.temporaryDirectory.path, decompressProgress) == 0 else {
+        guard await decompress(url.path, extractionRoot.path, decompressProgress) == 0 else {
             throw "lc.appList.urlFileIsNotIpaError".loc
         }
 
@@ -687,20 +687,27 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
 
         let appFolderPath = payloadPath.appendingPathComponent(appBundleName)
         
+        // Validate the original plist before LCAppInfo applies its fallback
+        // values. "Unknown" must not turn a corrupt archive into an install.
+        do { _ = try LCFileOperations.bundleIdentifier(in: appFolderPath) }
+        catch { throw "lc.appList.infoPlistCannotReadError".loc }
         guard let newAppInfo = LCAppInfo(bundlePath: appFolderPath.path) else {
             throw "lc.appList.infoPlistCannotReadError".loc
         }
 
-        var appRelativePath = "\(newAppInfo.bundleIdentifier()!.sanitizeNonACSII()).app"
+        guard let bundleID = newAppInfo.bundleIdentifier(), !bundleID.isEmpty else {
+            throw "lc.appList.infoPlistCannotReadError".loc
+        }
+        var appRelativePath = "\(bundleID.sanitizeNonACSII()).app"
         var outputFolder = LCPath.bundlePath.appendingPathComponent(appRelativePath)
         var appToReplace : LCAppModel? = nil
         // Folder exist! show alert for user to choose which bundle to replace
         var sameBundleIdApp = sharedModel.apps.filter { app in
-            return app.appInfo.bundleIdentifier()! == newAppInfo.bundleIdentifier()
+            return app.appInfo.bundleIdentifier() == bundleID
         }
         if sameBundleIdApp.count == 0 {
             sameBundleIdApp = sharedModel.hiddenApps.filter { app in
-                return app.appInfo.bundleIdentifier()! == newAppInfo.bundleIdentifier()
+                return app.appInfo.bundleIdentifier() == bundleID
             }
             
             // we found a hidden app, we need to authenticate before proceeding
@@ -721,7 +728,7 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         }
         
         if fm.fileExists(atPath: outputFolder.path) || sameBundleIdApp.count > 0 {
-            appRelativePath = "\(newAppInfo.bundleIdentifier()!)_\(Int(CFAbsoluteTimeGetCurrent())).app"
+            appRelativePath = "\(bundleID.sanitizeNonACSII())_\(UUID().uuidString).app"
             
             self.installOptions = [AppReplaceOption(isReplace: false, nameOfFolderToInstall: appRelativePath)]
             
@@ -743,12 +750,10 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
             }
             appRelativePath = installOptionChosen.nameOfFolderToInstall
             appToReplace = installOptionChosen.appToReplace
-            if installOptionChosen.isReplace {
-                try fm.removeItem(at: outputFolder)
-            }
+            // Replacement is committed below with rollback on a failed move.
         }
         // Move it!
-        try fm.moveItem(at: appFolderPath, to: outputFolder)
+        try LCFileOperations.installBundle(from: appFolderPath, to: outputFolder, replacing: appToReplace != nil, fileManager: fm)
         let finalNewApp = LCAppInfo(bundlePath: outputFolder.path)
         finalNewApp?.relativeBundlePath = appRelativePath
         
@@ -1019,17 +1024,18 @@ struct LCAppListView : View, LCAppBannerDelegate, LCAppModelDelegate {
         
         do {
             let fileManager = FileManager.default
-            let destinationURL = fileManager.temporaryDirectory.appendingPathComponent(installUrl.lastPathComponent)
-            if fileManager.fileExists(atPath: destinationURL.path) {
-                try fileManager.removeItem(at: destinationURL)
-            }
-            
+            let downloadDirectory = fileManager.temporaryDirectory.appendingPathComponent("LCDownload-" + UUID().uuidString, isDirectory: true)
+            try fileManager.createDirectory(at: downloadDirectory, withIntermediateDirectories: true)
+            defer { try? fileManager.removeItem(at: downloadDirectory) }
+            let destinationURL = downloadDirectory.appendingPathComponent("download.ipa")
+
             try await downloadHelper.download(url: installUrl, to: destinationURL)
             if downloadHelper.cancelled {
                 return
             }
             try await installIpaFile(destinationURL)
-            try fileManager.removeItem(at: destinationURL)
+        } catch is CancellationError {
+            return
         } catch {
             errorInfo = error.localizedDescription
             errorShow = true

@@ -13,5 +13,5 @@
 @interface NSString (Localization)
 @property(readonly, nonnull, getter=localized) NSString* loc;
 - (instancetype _Nonnull)localized;
-- (instancetype _Nonnull)localizeWithFormat:(NSString* _Nonnull)format, ...;
++ (NSString* _Nonnull)lcLocalizedStringWithFormat:(NSString* _Nonnull)format, ... NS_FORMAT_FUNCTION(1, 2);
 @end
