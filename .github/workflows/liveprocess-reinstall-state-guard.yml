@@ -26,6 +26,13 @@ jobs:
           "$RUNNER_TEMP/refresh-recovery-tests"
           clang -fobjc-arc -framework Foundation -I LiveProcess scripts/ci/tests/recovery/DirectoryAccess.m -o "$RUNNER_TEMP/refresh-directory-tests"
           "$RUNNER_TEMP/refresh-directory-tests"
+      - name: Run storage and download regressions
+        run: |
+          swiftc LiveContainerSwiftUI/Utilities/LCFileOperations.swift LiveContainerSwiftUI/Utilities/DownloadTransfer.swift scripts/ci/tests/storage/main.swift -o "$RUNNER_TEMP/storage-tests"
+          "$RUNNER_TEMP/storage-tests"
+          python3 scripts/ci/tests/storage/make_archives.py "$RUNNER_TEMP/archive-fixtures"
+          clang -fobjc-arc -framework Foundation -I LiveContainerSwiftUI/Utilities LiveContainerSwiftUI/Utilities/unarchive.m scripts/ci/tests/storage/Archive.m -larchive -o "$RUNNER_TEMP/archive-tests"
+          "$RUNNER_TEMP/archive-tests" "$RUNNER_TEMP/archive-fixtures"
       - name: Run combined source and package regressions
         run: python3 -m unittest discover -s scripts/ci/tests -p 'test_*.py' -v
       - name: Checkout pinned SideStore contract

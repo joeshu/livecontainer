@@ -7,6 +7,7 @@
 
 import SwiftUI
 
+@MainActor
 public final class DownloadHelper : ObservableObject {
     @Published var downloadProgress : Float = 0.0
     @Published var downloadedSize : Int64 = 0
@@ -14,70 +15,80 @@ public final class DownloadHelper : ObservableObject {
     @Published var isDownloading = false
     @Published var cancelled = false
     private var downloadTask: URLSessionDownloadTask?
-    private var continuation: UnsafeContinuation<(), Never>?
-    
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var session: URLSession?
+    private var delegate: DownloadDelegate?
+    private let requestState = DownloadRequestState()
+
+    @MainActor
     func download(url: URL, to: URL) async throws {
-        var ansError: Error? = nil
-
-        await MainActor.run {
-            cancelled = false
-            
-            downloadProgress = 0.0
-            downloadedSize = 0
-            totalSize = 0
-            
-            isDownloading = true
+        let id = UUID()
+        try Task.checkCancellation()
+        guard requestState.begin(id) else {
+            throw URLError(.backgroundSessionInUseByAnotherProcess)
         }
-        
-        await withUnsafeContinuation { c in
-            continuation = c
-            
-            let bgConfig = URLSessionConfiguration.background(withIdentifier: "com.livecontainer.download.\(UUID().uuidString)")
-            let session = URLSession(configuration: bgConfig, delegate: DownloadDelegate(progressCallback: { progress, downloaded, total in
-                Task{ await MainActor.run {
-                    self.downloadProgress = progress
-                    self.downloadedSize = downloaded
-                    self.totalSize = total
-                }}
-            }, completeCallback: {tempFileURL, error in
-                Task{ await MainActor.run {
-                    self.isDownloading = false
-                }}
-                if let error {
-                    print(error)
-                    ansError = error
+        cancelled = false
+        downloadProgress = 0
+        downloadedSize = 0
+        totalSize = 0
+        isDownloading = true
+
+        try await withTaskCancellationHandler(operation: {
+            try await withCheckedThrowingContinuation { (c: CheckedContinuation<Void, Error>) in
+                continuation = c
+                if Task.isCancelled {
+                    cancel(requestID: id, throwsCancellation: true)
+                    return
                 }
-                if let tempFileURL {
-                    do {
-                        let fm = FileManager.default
-                        print(to)
-                        try fm.moveItem(at: tempFileURL, to: to)
-                    } catch {
-                        ansError = error
+                let delegate = DownloadDelegate(destination: to, progressCallback: { progress, downloaded, total in
+                    Task { @MainActor in
+                        guard self.requestState.owns(id) else { return }
+                        self.downloadProgress = progress
+                        self.downloadedSize = downloaded
+                        self.totalSize = total
                     }
-                }
-                if self.continuation != nil {
-                    c.resume()
-                }
-
-            }), delegateQueue: .main)
-
-            downloadTask = session.downloadTask(with: url)
-            downloadTask?.resume()
-        }
-        if let ansError {
-            throw ansError
-        }
+                }, completeCallback: { result in
+                    Task { @MainActor in self.finish(requestID: id, result: result) }
+                })
+                self.delegate = delegate
+                let config = URLSessionConfiguration.background(withIdentifier: "com.livecontainer.download.\(id.uuidString)")
+                let session = URLSession(configuration: config, delegate: delegate, delegateQueue: .main)
+                self.session = session
+                downloadTask = session.downloadTask(with: url)
+                downloadTask?.resume()
+            }
+        }, onCancel: {
+            Task { @MainActor in self.cancel(requestID: id, throwsCancellation: true) }
+        })
     }
-    
-    func cancel() {
-        if let continuation {
-            continuation.resume()
-        }
-        cancelled = true
+
+    @MainActor
+    private func finish(requestID: UUID, result: Result<Void, Error>) {
+        guard requestState.finish(requestID) else { return }
+        let pending = continuation
         continuation = nil
-        downloadTask?.cancel()
+        downloadTask = nil
+        delegate = nil
+        session?.finishTasksAndInvalidate()
+        session = nil
         isDownloading = false
+        pending?.resume(with: result)
+    }
+
+    @MainActor
+    private func cancel(requestID: UUID, throwsCancellation: Bool) {
+        guard requestState.owns(requestID) else { return }
+        cancelled = true
+        delegate?.complete(.failure(CancellationError()))
+        downloadTask?.cancel()
+        session?.invalidateAndCancel()
+        finish(requestID: requestID, result: throwsCancellation ? .failure(CancellationError()) : .success(()))
+    }
+
+    @MainActor
+    func cancel() {
+        guard let id = requestState.taskID else { return }
+        cancel(requestID: id, throwsCancellation: false)
     }
 }
 
@@ -93,10 +104,15 @@ struct DownloadAlert : View {
                 .font(.headline)
                 .padding(.top)
             
-            ProgressView(value: helper.downloadProgress, total: 1)
-                .padding()
+            if helper.totalSize > 0 {
+                ProgressView(value: helper.downloadProgress, total: 1)
+                    .padding()
+            } else {
+                ProgressView()
+                    .padding()
+            }
             
-            Text("\(formatBytes(helper.downloadedSize)) / \(formatBytes(helper.totalSize))")
+            Text(helper.totalSize > 0 ? "\(formatBytes(helper.downloadedSize)) / \(formatBytes(helper.totalSize))" : formatBytes(helper.downloadedSize))
                 .font(.subheadline)
                 .padding(.bottom)
             
@@ -143,47 +159,6 @@ public struct DownloadAlertModifier: ViewModifier {
             withAnimation(.easeInOut(duration: 0.1)) {
                 show = newVal
             }
-        }
-    }
-}
-
-class DownloadDelegate: NSObject, URLSessionDownloadDelegate {
-    let progressCallback: (Float, Int64, Int64) -> Void
-    let completeCallback: (URL?, Error?) -> Void
-
-    init(progressCallback: @escaping (Float, Int64, Int64) -> Void,
-         completeCallback: @escaping (URL?, Error?) -> Void) {
-        self.progressCallback = progressCallback
-        self.completeCallback = completeCallback
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
-        let progress = Float(totalBytesWritten) / Float(totalBytesExpectedToWrite)
-        progressCallback(progress, totalBytesWritten, totalBytesExpectedToWrite)
-    }
-
-    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
-        if let httpResponse = downloadTask.response as? HTTPURLResponse {
-            let statusCode = httpResponse.statusCode
-
-            // Check if the status code is in the 2xx range
-            if (200...299).contains(statusCode) {
-                completeCallback(location, nil)
-            } else {
-                completeCallback(location, NSError(domain: "", code: statusCode, userInfo: [NSLocalizedDescriptionKey: "HTTP Error: \(statusCode)"]))
-            }
-        } else {
-            completeCallback(location, NSError(domain: "", code: -1, userInfo: [NSLocalizedDescriptionKey: "Invalid response"]))
-        }
-        
-
-    }
-    
-    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        if let error {
-            completeCallback(nil, error)
-        } else {
-
         }
     }
 }

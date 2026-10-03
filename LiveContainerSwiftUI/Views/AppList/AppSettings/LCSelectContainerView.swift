@@ -72,15 +72,7 @@ struct LCSelectContainerView : View{
         unusedContainers = []
         do {
             let fm = FileManager.default
-            try fm.createDirectory(at: LCPath.dataPath, withIntermediateDirectories: true)
-            let dataDirs = try fm.contentsOfDirectory(atPath: LCPath.dataPath.path)
-            for dataDir in dataDirs {
-                let dataDirUrl = LCPath.dataPath.appendingPathComponent(dataDir)
-                if !dataDirUrl.hasDirectoryPath {
-                    continue
-                }
-                appDataFolderNames.append(dataDir)
-            }
+            appDataFolderNames = try LCFileOperations.directories(in: LCPath.dataPath, fileManager: fm).map(\.lastPathComponent)
         } catch {
             
         }
