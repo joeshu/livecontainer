@@ -2,6 +2,7 @@
 
 #include "archive.h"
 #include "archive_entry.h"
+#include <stdlib.h>
 
 static int
 copy_data(struct archive *ar, struct archive *aw, NSProgress *progress)
@@ -33,6 +34,13 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
     struct archive_entry *entry;
     int flags;
     int r;
+    // Foundation may abbreviate /private/var back to /var. libarchive's
+    // secure-link mode needs the actual POSIX path, without parent symlinks.
+    char *resolvedRoot = realpath(extractionPath.fileSystemRepresentation, NULL);
+    if (!resolvedRoot) return 1;
+    NSString *root = [NSString stringWithUTF8String:resolvedRoot];
+    free(resolvedRoot);
+    if (!root.length) return 1;
 
     /* Select which attributes we want to restore. */
     flags = ARCHIVE_EXTRACT_TIME;
@@ -85,7 +93,6 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
         
         const char *rawPath = archive_entry_pathname(entry);
         NSString *currentFile = rawPath ? [NSString stringWithUTF8String:rawPath] : nil;
-        NSString *root = extractionPath.stringByResolvingSymlinksInPath.stringByStandardizingPath;
         if (!currentFile.length || currentFile.isAbsolutePath ||
             [currentFile.pathComponents containsObject:@".."] || archive_entry_hardlink(entry)) {
             r = ARCHIVE_FATAL;
