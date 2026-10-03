@@ -85,7 +85,7 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
         
         const char *rawPath = archive_entry_pathname(entry);
         NSString *currentFile = rawPath ? [NSString stringWithUTF8String:rawPath] : nil;
-        NSString *root = extractionPath.stringByStandardizingPath;
+        NSString *root = extractionPath.stringByResolvingSymlinksInPath.stringByStandardizingPath;
         if (!currentFile.length || currentFile.isAbsolutePath ||
             [currentFile.pathComponents containsObject:@".."] || archive_entry_hardlink(entry)) {
             r = ARCHIVE_FATAL;
