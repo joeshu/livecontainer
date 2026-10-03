@@ -102,9 +102,23 @@ int extract(NSString* fileToExtract, NSString* extractionPath, NSProgress* progr
         const char *rawLink = archive_entry_symlink(entry);
         if (rawLink) {
             NSString *target = [NSString stringWithUTF8String:rawLink];
-            NSString *resolved = [[fullOutputPath.stringByDeletingLastPathComponent stringByAppendingPathComponent:target ?: @""] stringByStandardizingPath];
-            if (!target.length || target.isAbsolutePath ||
-                ![resolved hasPrefix:[root stringByAppendingString:@"/"]]) {
+            // Validate relative link depth directly. Foundation's path
+            // standardization can turn /private/var back into /var, which is
+            // the same directory but fails a canonical-root prefix comparison.
+            BOOL safe = target.length && !target.isAbsolutePath;
+            NSInteger depth = 0;
+            for (NSString *component in currentFile.stringByDeletingLastPathComponent.pathComponents) {
+                if (component.length && ![component isEqualToString:@"."]) depth++;
+            }
+            for (NSString *component in target.pathComponents) {
+                if ([component isEqualToString:@".."]) {
+                    if (depth == 0) { safe = NO; break; }
+                    depth--;
+                } else if (component.length && ![component isEqualToString:@"."]) {
+                    depth++;
+                }
+            }
+            if (!safe) {
                 r = ARCHIVE_FATAL;
                 break;
             }

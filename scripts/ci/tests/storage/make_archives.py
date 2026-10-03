@@ -8,7 +8,7 @@ root.mkdir(parents=True, exist_ok=True)
 for name, path in [('valid', 'Payload/Test.app/data'), ('traversal', '../outside'), ('absolute', '/tmp/lc-archive-escape')]:
     with zipfile.ZipFile(root / (name + '.zip'), 'w') as archive:
         archive.writestr(path, 'test')
-for name, target in [('safe-link', 'data'), ('unsafe-link', '../../../outside')]:
+for name, target in [('safe-link', 'data'), ('safe-link-up', '../Test.app/data'), ('unsafe-link', '../../../outside')]:
     with zipfile.ZipFile(root / (name + '.zip'), 'w') as archive:
         archive.writestr('Payload/Test.app/data', 'test')
         link = zipfile.ZipInfo('Payload/Test.app/link')
